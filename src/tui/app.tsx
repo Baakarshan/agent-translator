@@ -46,29 +46,26 @@ function getProviderColor(provider: ProviderId): string {
 }
 
 function getAssistantLabel(message: DisplayMessage): { label: string; labelColor: string; textColor: string } {
-  if (message.displayMode === "summarize") {
-    if (message.translationStatus === "cached") {
-      return {
-        label: "摘要 [缓存]",
-        labelColor: THEME.summaryLabel,
-        textColor: THEME.summaryText,
-      };
-    }
-    return {
-      label: "摘要",
-      labelColor: THEME.summaryLabel,
-      textColor: THEME.summaryText,
-    };
+  if (message.kind === "command") {
+    return { label: "命令", labelColor: THEME.summaryLabel, textColor: THEME.summaryText };
   }
-  if (message.translationStatus === "cached") {
-    return {
-      label: "译 [缓存]",
-      labelColor: THEME.assistantLabel,
-      textColor: THEME.assistantText,
-    };
+  if (message.kind === "code") {
+    return { label: "代码", labelColor: THEME.summaryLabel, textColor: THEME.summaryText };
+  }
+  if (message.kind === "diff") {
+    return { label: "改动", labelColor: THEME.summaryLabel, textColor: THEME.summaryText };
+  }
+  if (message.kind === "shell") {
+    return { label: "输出", labelColor: THEME.summaryLabel, textColor: THEME.summaryText };
+  }
+  if (message.kind === "tool") {
+    return { label: "工具", labelColor: THEME.summaryLabel, textColor: THEME.summaryText };
+  }
+  if (message.kind === "table") {
+    return { label: "表格", labelColor: THEME.assistantLabel, textColor: THEME.assistantText };
   }
   return {
-    label: "译",
+    label: "翻译",
     labelColor: THEME.assistantLabel,
     textColor: THEME.assistantText,
   };

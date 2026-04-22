@@ -33,7 +33,8 @@ describe("flattenTranscript", () => {
       80,
     );
 
-    expect(lines.some((line) => line.text.includes("译 [缓存] 缓存文本"))).toBe(true);
+    expect(lines.some((line) => line.prefix?.includes("翻译"))).toBe(true);
+    expect(lines.some((line) => line.text.includes("缓存文本"))).toBe(true);
     expect(lines.some((line) => line.text.includes("Hello world"))).toBe(false);
   });
 
@@ -51,7 +52,8 @@ describe("flattenTranscript", () => {
       120,
     );
 
-    expect(lines.some((line) => line.text.includes("摘要 这个命令会查看当前工作区改动。"))).toBe(true);
+    expect(lines.some((line) => line.prefix?.includes("命令"))).toBe(true);
+    expect(lines.some((line) => line.text.includes("这个命令会查看当前工作区改动。"))).toBe(true);
     expect(lines.some((line) => line.text.includes("git diff"))).toBe(false);
   });
 

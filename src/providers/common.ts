@@ -278,6 +278,31 @@ export function dedupeAdjacentMessages(messages: RawParsedMessage[]): RawParsedM
   return deduped;
 }
 
+function mergeAdjacentAssistantNarrative(messages: RawParsedMessage[]): RawParsedMessage[] {
+  const merged: RawParsedMessage[] = [];
+
+  for (const message of messages) {
+    const previous = merged[merged.length - 1];
+    const canMerge = previous
+      && previous.role === "assistant"
+      && message.role === "assistant"
+      && (previous.kind ?? "prose") === "prose"
+      && (message.kind ?? "prose") === "prose"
+      && (previous.displayMode ?? "translate") === "translate"
+      && (message.displayMode ?? "translate") === "translate";
+
+    if (canMerge) {
+      previous.text = `${previous.text}\n\n${message.text}`;
+      previous.timestamp = message.timestamp;
+      continue;
+    }
+
+    merged.push({ ...message });
+  }
+
+  return merged;
+}
+
 export function finalizeMessages(
   provider: ProviderId,
   sessionId: string,
@@ -295,8 +320,9 @@ export function finalizeMessages(
       },
     ];
   });
+  const merged = mergeAdjacentAssistantNarrative(expanded);
 
-  return expanded.map((message, index) => ({
+  return merged.map((message, index) => ({
     provider,
     sessionId,
     messageId: makeMessageId(provider, sessionId, message.role, index),

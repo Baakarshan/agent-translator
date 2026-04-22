@@ -38,6 +38,6 @@ describe("parseCodexSessionFile", () => {
       "utf8",
     );
     const complete = await parseCodexSessionFile(filePath);
-    expect(complete?.messages.at(-1)?.originalText).toBe("Trailing assistant message");
+    expect(complete?.messages.at(-1)?.originalText).toBe("I will inspect the diff first.\n\nTrailing assistant message");
   });
 });
