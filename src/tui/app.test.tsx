@@ -6,6 +6,7 @@ import {
   flattenTranscript,
   getDescriptorWatchKey,
   getTranscriptRenderKey,
+  resolveSelectedDescriptor,
 } from "./app.js";
 
 function createAssistantMessage(overrides: Partial<DisplayMessage>): DisplayMessage {
@@ -138,6 +139,80 @@ describe("getDescriptorWatchKey", () => {
     };
 
     expect(getDescriptorWatchKey(base)).toBe(getDescriptorWatchKey(next));
+  });
+});
+
+describe("resolveSelectedDescriptor", () => {
+  test("keeps the attached session even when a newer latest session appears", () => {
+    const sessions: SessionDescriptor[] = [
+      {
+        provider: "codex",
+        sessionId: "current-session",
+        filePath: "/tmp/current.jsonl",
+        cwd: "/tmp/project",
+        title: "current",
+        lastActivityAt: "2026-04-22T00:00:00.000Z",
+        lastActivityMs: 1,
+        live: true,
+      },
+      {
+        provider: "codex",
+        sessionId: "newer-session",
+        filePath: "/tmp/newer.jsonl",
+        cwd: "/tmp/project",
+        title: "newer",
+        lastActivityAt: "2026-04-22T00:01:00.000Z",
+        lastActivityMs: 2,
+        live: true,
+      },
+    ];
+
+    const descriptor = resolveSelectedDescriptor({
+      sessions,
+      provider: "codex",
+      latest: true,
+      sessionId: "current-session",
+      cwd: "/tmp/project",
+      selectedIndex: 0,
+    });
+
+    expect(descriptor?.sessionId).toBe("current-session");
+  });
+
+  test("uses latest matching session before anything is attached", () => {
+    const sessions: SessionDescriptor[] = [
+      {
+        provider: "codex",
+        sessionId: "older-session",
+        filePath: "/tmp/older.jsonl",
+        cwd: "/tmp/project",
+        title: "older",
+        lastActivityAt: "2026-04-22T00:00:00.000Z",
+        lastActivityMs: 1,
+        live: true,
+      },
+      {
+        provider: "codex",
+        sessionId: "newest-session",
+        filePath: "/tmp/newest.jsonl",
+        cwd: "/tmp/project",
+        title: "newest",
+        lastActivityAt: "2026-04-22T00:02:00.000Z",
+        lastActivityMs: 3,
+        live: true,
+      },
+    ];
+
+    const descriptor = resolveSelectedDescriptor({
+      sessions,
+      provider: "codex",
+      latest: true,
+      sessionId: null,
+      cwd: "/tmp/project",
+      selectedIndex: 0,
+    });
+
+    expect(descriptor?.sessionId).toBe("newest-session");
   });
 });
 

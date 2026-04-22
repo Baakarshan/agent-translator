@@ -369,6 +369,43 @@ export function getDescriptorWatchKey(descriptor: SessionDescriptor | null): str
   return `${descriptor.provider}:${descriptor.sessionId}:${descriptor.filePath}`;
 }
 
+export function resolveSelectedDescriptor(params: {
+  sessions: SessionDescriptor[];
+  provider?: ProviderId | undefined;
+  latest?: boolean | undefined;
+  sessionId?: string | null | undefined;
+  cwd?: string | undefined;
+  afterMs?: number | undefined;
+  selectedIndex: number;
+}): SessionDescriptor | null {
+  const visibleSessions = params.provider
+    ? params.sessions.filter((session) => session.provider === params.provider)
+    : params.sessions;
+
+  if (params.sessionId) {
+    const targetCwd = params.cwd ? path.resolve(params.cwd) : null;
+    return (
+      params.sessions.find(
+        (session) =>
+          session.sessionId === params.sessionId &&
+          (!params.provider || session.provider === params.provider) &&
+          (!targetCwd || path.resolve(session.cwd) === targetCwd),
+      ) ?? null
+    );
+  }
+
+  if (params.latest) {
+    return selectSessionDescriptor(params.sessions, {
+      provider: params.provider,
+      latest: true,
+      cwd: params.cwd,
+      afterMs: params.afterMs,
+    });
+  }
+
+  return visibleSessions[params.selectedIndex] ?? null;
+}
+
 function SessionListView(props: { sessions: SessionDescriptor[]; selectedIndex: number }): React.JSX.Element {
   if (props.sessions.length === 0) {
     return (
@@ -454,29 +491,16 @@ export function App(props: AppProps): React.JSX.Element {
   }, [props.provider, sessions]);
 
   const selectedDescriptor = useMemo(() => {
-    if (props.latest) {
-      return selectSessionDescriptor(sessions, {
-        provider: props.provider,
-        latest: true,
-        cwd: props.cwd,
-        afterMs: props.afterMs,
-      });
-    }
-
-    if (selectedSessionId) {
-      const targetCwd = props.cwd ? path.resolve(props.cwd) : null;
-      return (
-        sessions.find(
-          (session) =>
-            session.sessionId === selectedSessionId &&
-            (!props.provider || session.provider === props.provider) &&
-            (!targetCwd || path.resolve(session.cwd) === targetCwd),
-        ) ?? null
-      );
-    }
-
-    return visibleSessions[selectedIndex] ?? null;
-  }, [props.afterMs, props.cwd, props.latest, props.provider, selectedIndex, selectedSessionId, sessions, visibleSessions]);
+    return resolveSelectedDescriptor({
+      sessions,
+      provider: props.provider,
+      latest: props.latest,
+      sessionId: selectedSessionId,
+      cwd: props.cwd,
+      afterMs: props.afterMs,
+      selectedIndex,
+    });
+  }, [props.afterMs, props.cwd, props.latest, props.provider, selectedIndex, selectedSessionId, sessions]);
   const selectedDescriptorWatchKey = getDescriptorWatchKey(selectedDescriptor);
   const detailDescriptor = attachedDescriptor ?? selectedDescriptor;
 
