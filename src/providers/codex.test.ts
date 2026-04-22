@@ -15,9 +15,10 @@ describe("parseCodexSessionFile", () => {
     expect(snapshot?.provider).toBe("codex");
     expect(snapshot?.sessionId).toBe("019d958f-1fb2-75d0-8181-7339ec961519");
     expect(snapshot?.cwd).toBe("/Users/baakarshan/Developer/products/demo");
-    expect(snapshot?.messages.map((message) => [message.role, message.originalText])).toEqual([
-      ["user", "Please help me review this change"],
-      ["assistant", "I will inspect the diff first."],
+    expect(snapshot?.messages.map((message) => [message.role, message.kind, message.originalText])).toEqual([
+      ["user", "prose", "Please help me review this change"],
+      ["assistant", "prose", "I will inspect the diff first."],
+      ["assistant", "tool", 'exec_command {"cmd":"git diff"}'],
     ]);
   });
 
@@ -30,7 +31,7 @@ describe("parseCodexSessionFile", () => {
 
     await writeFile(filePath, `${completePrefix}\n${partialLine}`, "utf8");
     const incomplete = await parseCodexSessionFile(filePath);
-    expect(incomplete?.messages.at(-1)?.originalText).toBe("I will inspect the diff first.");
+    expect(incomplete?.messages.at(-1)?.originalText).toBe('exec_command {"cmd":"git diff"}');
 
     await writeFile(
       filePath,
@@ -41,4 +42,3 @@ describe("parseCodexSessionFile", () => {
     expect(complete?.messages.at(-1)?.originalText).toBe("Trailing assistant message");
   });
 });
-

@@ -9,8 +9,17 @@ type MessageState = DisplayMessage & {
   fingerprint: string;
 };
 
-function toFingerprint(config: TranslatorConfig, text: string): string {
-  return hashText(`${config.model}\u0000${config.promptVersion}\u0000${text}`);
+function toFingerprint(config: TranslatorConfig, message: ParsedMessage): string {
+  return hashText(`${config.model}\u0000${config.promptVersion}\u0000${message.kind}\u0000${message.originalText}`);
+}
+
+function toDisplayMessage(message: ParsedMessage): DisplayMessage {
+  return {
+    ...message,
+    summaryText: null,
+    displayText: null,
+    translationStatus: "idle",
+  };
 }
 
 export class TranscriptTranslationStore extends EventEmitter {
@@ -53,14 +62,14 @@ export class TranscriptTranslationStore extends EventEmitter {
     this.order = messages.map((message) => message.messageId);
 
     for (const message of messages) {
-      const fingerprint = toFingerprint(this.config, message.originalText);
+      const fingerprint = toFingerprint(this.config, message);
       const previous = this.messageStates.get(message.messageId);
 
       if (message.role === "user") {
         this.clearTimer(message.messageId);
         this.messageStates.set(message.messageId, {
-          ...message,
-          translatedText: null,
+          ...toDisplayMessage(message),
+          displayText: message.originalText,
           translationStatus: "idle",
           fingerprint,
         });
@@ -69,8 +78,12 @@ export class TranscriptTranslationStore extends EventEmitter {
 
       if (previous && previous.fingerprint === fingerprint) {
         this.messageStates.set(message.messageId, {
-          ...previous,
           ...message,
+          summaryText: previous.summaryText,
+          displayText: previous.displayText,
+          translationStatus: previous.translationStatus,
+          translationError: previous.translationError,
+          fingerprint,
         });
         continue;
       }
@@ -79,8 +92,9 @@ export class TranscriptTranslationStore extends EventEmitter {
       if (cached) {
         this.clearTimer(message.messageId);
         this.messageStates.set(message.messageId, {
-          ...message,
-          translatedText: cached,
+          ...toDisplayMessage(message),
+          summaryText: message.displayMode === "summarize" ? cached : null,
+          displayText: cached,
           translationStatus: "cached",
           fingerprint,
         });
@@ -88,8 +102,7 @@ export class TranscriptTranslationStore extends EventEmitter {
       }
 
       this.messageStates.set(message.messageId, {
-        ...message,
-        translatedText: null,
+        ...toDisplayMessage(message),
         translationStatus: "scheduled",
         fingerprint,
       });
@@ -139,15 +152,20 @@ export class TranscriptTranslationStore extends EventEmitter {
     this.emit("update", this.getMessages());
 
     try {
-      const translatedText = await this.translator.translate(current.originalText);
+      const generatedText = await this.translator.generate(current);
       const latest = this.messageStates.get(messageId);
       if (!latest || latest.fingerprint !== fingerprint) {
         return;
       }
-      await this.cache.set(fingerprint, translatedText);
+      try {
+        await this.cache.set(fingerprint, generatedText);
+      } catch {
+        // Cache persistence failure should not block the visible result.
+      }
       this.messageStates.set(messageId, {
         ...latest,
-        translatedText,
+        summaryText: latest.displayMode === "summarize" ? generatedText : null,
+        displayText: generatedText,
         translationStatus: "translated",
         translationError: undefined,
       });
@@ -158,7 +176,8 @@ export class TranscriptTranslationStore extends EventEmitter {
       }
       this.messageStates.set(messageId, {
         ...latest,
-        translatedText: null,
+        summaryText: null,
+        displayText: null,
         translationStatus: "failed",
         translationError: error instanceof Error ? error.message : String(error),
       });

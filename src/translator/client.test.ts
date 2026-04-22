@@ -1,11 +1,12 @@
 import { describe, expect, test, vi } from "vitest";
 
 import { getTranslatorConfig } from "../config.js";
-import { TranslatorClient, getTranslationSystemPrompt } from "./client.js";
+import { TranslatorClient, getGenerationSystemPrompt } from "./client.js";
 
 describe("TranslatorClient", () => {
-  test("includes preservation instructions in the system prompt", () => {
-    expect(getTranslationSystemPrompt()).toContain("Keep code blocks, commands, file paths, JSON, stack traces, and identifiers unchanged.");
+  test("uses translation prompts for prose and summary prompts for technical blocks", () => {
+    expect(getGenerationSystemPrompt("prose", "translate")).toContain("Translate the assistant message");
+    expect(getGenerationSystemPrompt("command", "summarize")).toContain("Write a concise Simplified Chinese summary");
   });
 
   test("sends a responses request and extracts translated text", async () => {
@@ -30,7 +31,11 @@ describe("TranslatorClient", () => {
       fetchMock as unknown as typeof fetch,
     );
 
-    const result = await client.translate("Please keep `/tmp/app.ts` unchanged.");
+    const result = await client.generate({
+      originalText: "Please keep `/tmp/app.ts` unchanged.",
+      kind: "prose",
+      displayMode: "translate",
+    });
     expect(result).toBe("这是翻译结果");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [, init] = fetchMock.mock.calls[0]!;
@@ -40,4 +45,3 @@ describe("TranslatorClient", () => {
     expect(body.input[1].content[0].text).toContain("/tmp/app.ts");
   });
 });
-

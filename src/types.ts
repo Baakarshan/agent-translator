@@ -2,6 +2,18 @@ export type ProviderId = "codex" | "claude";
 
 export type MessageRole = "user" | "assistant";
 
+export type MessageKind =
+  | "prose"
+  | "code"
+  | "command"
+  | "tool"
+  | "diff"
+  | "shell"
+  | "table"
+  | "unknown";
+
+export type DisplayMode = "translate" | "summarize" | "skip";
+
 export type TranslationStatus =
   | "idle"
   | "scheduled"
@@ -15,12 +27,17 @@ export interface ParsedMessage {
   sessionId: string;
   messageId: string;
   role: MessageRole;
+  kind: MessageKind;
+  displayMode: DisplayMode;
   originalText: string;
+  summaryText: string | null;
+  displayText: string | null;
   timestamp: string;
 }
 
 export interface DisplayMessage extends ParsedMessage {
-  translatedText: string | null;
+  summaryText: string | null;
+  displayText: string | null;
   translationStatus: TranslationStatus;
   translationError?: string | undefined;
 }

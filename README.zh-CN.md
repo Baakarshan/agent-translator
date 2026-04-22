@@ -2,9 +2,12 @@
 
 English README: [README.md](./README.md)
 
-这是一个只读的翻译 TUI，支持 Codex 和 Claude Code。
+这是一个只读的中文阅读 TUI，支持 Codex 和 Claude Code。
 
-它保留原生 agent 在原终端里运行，同时在单独的 TUI 窗口中显示英文 assistant 输出和对应的简体中文翻译。
+它保留原生 agent 在原终端里运行，同时在单独的 TUI 窗口中显示中文结果：
+
+- 普通自然语言回复会翻译成简体中文
+- 代码块、命令、工具调用、diff、shell 风格输出会改写成简洁中文摘要
 
 ## 依赖
 
@@ -45,13 +48,13 @@ AGENT_TRANSLATOR_BASE_URL=https://your-host/v1
 
 ## 用法
 
-在当前终端运行 Codex，并自动打开单独的翻译 TUI：
+在当前终端运行 Codex，并自动打开单独的中文 TUI：
 
 ```bash
 agent-translator codex --tui
 ```
 
-在当前终端运行 Claude Code，并自动打开单独的翻译 TUI：
+在当前终端运行 Claude Code，并自动打开单独的中文 TUI：
 
 ```bash
 agent-translator claude --tui
@@ -74,20 +77,23 @@ agent-translator tui --provider codex --session <id>
 
 - `Ctrl+C` 或 `q`：退出
 - `b`：返回会话列表
-- `j` / `k` 或方向键：滚动
+- 方向键：在会话列表中选择
 - `Enter`：从会话列表附着
 
-## 翻译状态
+正文浏览使用终端原生滚动，Ghostty 或 Terminal.app 中都应直接支持触控板双指上下滑动。
 
-- `ZH ~ [queued]`：等待翻译
-- `ZH ~ [translating]`：翻译请求进行中
-- `ZH >`：实时翻译结果
-- `ZH =`：本地缓存命中
-- `ZH ! [failed: ...]`：翻译请求失败
+## 输出标签
+
+- `你`：用户消息，保留原文
+- `译`：普通自然语言或表格的中文结果
+- `摘要`：代码、命令、工具调用、diff、shell 风格输出的中文摘要
+- `状态`：等待生成、生成中、失败等状态提示
 
 ## 会话匹配
 
 包装命令会把当前工作目录传给 TUI，所以 `agent-translator codex --tui` 和 `agent-translator claude --tui` 会优先附着到当前项目目录下的最新会话，而不是跳到别的项目。
+
+macOS 下默认会优先尝试用 `/Applications/Ghostty.app` 打开 TUI；如果 Ghostty 无法启动，则自动回退到 Terminal.app。
 
 ## 自检
 

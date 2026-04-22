@@ -22,7 +22,11 @@ function createMessage(id: string, text: string): ParsedMessage {
     sessionId: "session-1",
     messageId: id,
     role: "assistant",
+    kind: "prose",
+    displayMode: "translate",
     originalText: text,
+    summaryText: null,
+    displayText: null,
     timestamp: "2026-04-22T00:00:00.000Z",
   };
 }
@@ -45,32 +49,32 @@ describe("TranscriptTranslationStore", () => {
   test("reuses cached translations and avoids duplicate network work", async () => {
     const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
     const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
-    const translate = vi.fn().mockResolvedValue("第一次翻译");
+    const generate = vi.fn().mockResolvedValue("第一次翻译");
     const store = new TranscriptTranslationStore({
       config: baseConfig,
       cache,
-      translator: { translate } as any,
+      translator: { generate } as any,
     });
 
     await store.setMessages([createMessage("msg-1", "Hello world")]);
     await waitForCondition(() => store.getMessages()[0]?.translationStatus === "translated");
-    expect(store.getMessages()[0]?.translatedText).toBe("第一次翻译");
-    expect(translate).toHaveBeenCalledTimes(1);
+    expect(store.getMessages()[0]?.displayText).toBe("第一次翻译");
+    expect(generate).toHaveBeenCalledTimes(1);
 
     await store.setMessages([createMessage("msg-1", "Hello world")]);
-    expect(store.getMessages()[0]?.translatedText).toBe("第一次翻译");
-    expect(translate).toHaveBeenCalledTimes(1);
+    expect(store.getMessages()[0]?.displayText).toBe("第一次翻译");
+    expect(generate).toHaveBeenCalledTimes(1);
     store.destroy();
   });
 
   test("marks reused text from the cache as cached for a new row", async () => {
     const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
     const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
-    const translate = vi.fn().mockResolvedValue("缓存命中");
+    const generate = vi.fn().mockResolvedValue("缓存命中");
     const store = new TranscriptTranslationStore({
       config: baseConfig,
       cache,
-      translator: { translate } as any,
+      translator: { generate } as any,
     });
 
     await store.setMessages([createMessage("msg-1", "Cache me")]);
@@ -78,23 +82,23 @@ describe("TranscriptTranslationStore", () => {
 
     await store.setMessages([createMessage("msg-2", "Cache me")]);
     const nextMessage = store.getMessages()[0];
-    expect(nextMessage?.translatedText).toBe("缓存命中");
+    expect(nextMessage?.displayText).toBe("缓存命中");
     expect(nextMessage?.translationStatus).toBe("cached");
-    expect(translate).toHaveBeenCalledTimes(1);
+    expect(generate).toHaveBeenCalledTimes(1);
     store.destroy();
   });
 
   test("marks only the failing row as failed", async () => {
     const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
     const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
-    const translate = vi
+    const generate = vi
       .fn()
       .mockRejectedValueOnce(new Error("boom"))
       .mockResolvedValueOnce("第二条成功");
     const store = new TranscriptTranslationStore({
       config: baseConfig,
       cache,
-      translator: { translate } as any,
+      translator: { generate } as any,
     });
 
     await store.setMessages([
@@ -109,7 +113,29 @@ describe("TranscriptTranslationStore", () => {
     const messages = store.getMessages();
     expect(messages[0]?.translationStatus).toBe("failed");
     expect(messages[1]?.translationStatus).toBe("translated");
-    expect(messages[1]?.translatedText).toBe("第二条成功");
+    expect(messages[1]?.displayText).toBe("第二条成功");
+    store.destroy();
+  });
+
+  test("keeps the generated result even when cache persistence fails", async () => {
+    const cache = {
+      load: vi.fn().mockResolvedValue(undefined),
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn().mockRejectedValue(new Error("cache write denied")),
+    };
+    const generate = vi.fn().mockResolvedValue("仍然展示结果");
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache: cache as any,
+      translator: { generate } as any,
+    });
+
+    await store.setMessages([createMessage("msg-1", "Show result even without cache")]);
+    await waitForCondition(() => store.getMessages()[0]?.translationStatus === "translated");
+
+    const message = store.getMessages()[0];
+    expect(message?.displayText).toBe("仍然展示结果");
+    expect(message?.translationStatus).toBe("translated");
     store.destroy();
   });
 });

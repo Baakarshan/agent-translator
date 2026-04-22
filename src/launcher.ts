@@ -1,6 +1,10 @@
+import { access } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { constants as fsConstants } from "node:fs";
 
 import type { ProviderId } from "./types.js";
+
+export const GHOSTTY_APP_PATH = "/Applications/Ghostty.app";
 
 function shellEscape(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -17,16 +21,35 @@ export function buildTerminalScript(provider: ProviderId, cwd: string): string {
   return buildSelfCommand(["tui", "--latest", "--provider", provider, "--cwd", cwd]);
 }
 
-export async function openTuiTerminal(provider: ProviderId, cwd: string): Promise<void> {
-  if (process.platform !== "darwin") {
-    throw new Error("Automatic TUI terminal launching is only supported on macOS");
-  }
+export function buildGhosttyOpenArgs(provider: ProviderId, cwd: string): string[] {
+  return [
+    "-na",
+    GHOSTTY_APP_PATH,
+    "--args",
+    "-e",
+    "zsh",
+    "-lc",
+    buildTerminalScript(provider, cwd),
+  ];
+}
 
+export function buildTerminalAppleScript(provider: ProviderId, cwd: string): string {
   const command = buildTerminalScript(provider, cwd).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  const script = `tell application "Terminal" to do script "${command}"`;
+  return `tell application "Terminal" to do script "${command}"`;
+}
 
+async function canLaunchGhostty(): Promise<boolean> {
+  try {
+    await access(GHOSTTY_APP_PATH, fsConstants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function runLauncherCommand(command: string, args: string[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn("osascript", ["-e", script], {
+    const child = spawn(command, args, {
       stdio: "ignore",
     });
 
@@ -36,9 +59,26 @@ export async function openTuiTerminal(provider: ProviderId, cwd: string): Promis
         resolve();
         return;
       }
-      reject(new Error(`osascript exited with code ${code}`));
+      reject(new Error(`${command} exited with code ${code}`));
     });
   });
+}
+
+export async function openTuiTerminal(provider: ProviderId, cwd: string): Promise<void> {
+  if (process.platform !== "darwin") {
+    throw new Error("Automatic TUI terminal launching is only supported on macOS");
+  }
+
+  if (await canLaunchGhostty()) {
+    try {
+      await runLauncherCommand("open", buildGhosttyOpenArgs(provider, cwd));
+      return;
+    } catch {
+      // Fall back to Terminal.app if Ghostty fails to launch.
+    }
+  }
+
+  await runLauncherCommand("osascript", ["-e", buildTerminalAppleScript(provider, cwd)]);
 }
 
 export async function runProviderBinary(

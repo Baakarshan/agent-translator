@@ -2,9 +2,12 @@
 
 Chinese README: [README.zh-CN.md](./README.zh-CN.md)
 
-Read-only translation TUI for Codex and Claude Code.
+Read-only Chinese reading TUI for Codex and Claude Code.
 
-It keeps the native agent running in its original terminal and shows English assistant output plus Simplified Chinese translations in a separate TUI window.
+It keeps the native agent running in its original terminal and shows Chinese-only assistant output in a separate TUI window:
+
+- prose replies are translated into Simplified Chinese
+- code blocks, commands, tool calls, diffs, and shell-like output are converted into concise Chinese summaries
 
 ## Requirements
 
@@ -45,13 +48,13 @@ AGENT_TRANSLATOR_BASE_URL=https://your-host/v1
 
 ## Usage
 
-Run Codex in the current terminal and open a separate translation TUI:
+Run Codex in the current terminal and open a separate Chinese TUI:
 
 ```bash
 agent-translator codex --tui
 ```
 
-Run Claude Code in the current terminal and open a separate translation TUI:
+Run Claude Code in the current terminal and open a separate Chinese TUI:
 
 ```bash
 agent-translator claude --tui
@@ -74,20 +77,23 @@ agent-translator tui --provider codex --session <id>
 
 - `Ctrl+C` or `q`: quit
 - `b`: back to session list
-- `j` / `k` or arrow keys: scroll
+- Arrow keys: move in session list
 - `Enter`: attach from session list
 
-## Translation status
+Transcript scrolling uses the terminal's native scroll behavior, including touchpad two-finger scrolling in Ghostty or Terminal.app.
 
-- `ZH ~ [queued]`: waiting for translation
-- `ZH ~ [translating]`: request in progress
-- `ZH >`: translated live
-- `ZH =`: served from local cache
-- `ZH ! [failed: ...]`: translation request failed
+## Output mode
+
+- `你`: user message, shown as original text
+- `译`: translated Chinese prose/table output
+- `摘要`: Chinese summary for code, commands, tool calls, diffs, and shell-like output
+- `状态`: queued, generating, or failed assistant row state
 
 ## Session matching
 
 Wrapper commands pass the current working directory into the TUI, so `agent-translator codex --tui` and `agent-translator claude --tui` attach to the latest matching session in the current project instead of jumping to another project.
+
+On macOS, the launcher now tries Ghostty first via `/Applications/Ghostty.app`. If Ghostty can't be launched, it falls back to Terminal.app.
 
 ## Verify
 

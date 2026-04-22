@@ -3,6 +3,7 @@ import path from "node:path";
 
 import type { SessionDescriptor, SessionSnapshot } from "../types.js";
 import {
+  displayModeForKind,
   finalizeMessages,
   isSyntheticCodexUserMessage,
   readTimestamp,
@@ -25,7 +26,13 @@ function extractMessageText(content: unknown): string {
       if (!block || typeof block !== "object") {
         return "";
       }
-      const candidate = block as { text?: unknown; message?: unknown };
+      const candidate = block as { text?: unknown; message?: unknown; type?: unknown };
+      if (typeof candidate.type === "string") {
+        const normalizedType = candidate.type.toLowerCase();
+        if (normalizedType.includes("thinking") || normalizedType.includes("reasoning")) {
+          return "";
+        }
+      }
       if (typeof candidate.text === "string") {
         return candidate.text.trim();
       }
@@ -77,6 +84,18 @@ function parseResponseItem(entry: Record<string, unknown>, fallbackTimestamp: st
     return {
       role,
       text,
+      timestamp: readTimestamp(entry, fallbackTimestamp),
+    };
+  }
+
+  if (payload.type === "function_call" && typeof payload.name === "string") {
+    const argumentsText = typeof payload.arguments === "string" ? payload.arguments.trim() : "";
+    const text = argumentsText ? `${payload.name} ${argumentsText}` : payload.name;
+    return {
+      role: "assistant",
+      text,
+      kind: "tool",
+      displayMode: displayModeForKind("tool"),
       timestamp: readTimestamp(entry, fallbackTimestamp),
     };
   }
@@ -192,4 +211,3 @@ export async function readCodexDescriptor(filePath: string): Promise<SessionDesc
   const { messages: _messages, ...descriptor } = snapshot;
   return descriptor;
 }
-

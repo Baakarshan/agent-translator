@@ -22,11 +22,21 @@ type TranscriptLine = {
   color?: string;
 };
 
-function getTranslationPrefix(message: DisplayMessage): { label: string; color: string } {
-  if (message.translationStatus === "cached") {
-    return { label: "ZH =", color: "green" };
+function getProviderColor(provider: ProviderId): string {
+  return provider === "codex" ? "cyan" : "magenta";
+}
+
+function getAssistantLabel(message: DisplayMessage): { label: string; color: string } {
+  if (message.displayMode === "summarize") {
+    if (message.translationStatus === "cached") {
+      return { label: "摘要 [缓存]", color: "cyan" };
+    }
+    return { label: "摘要", color: "cyan" };
   }
-  return { label: "ZH >", color: "green" };
+  if (message.translationStatus === "cached") {
+    return { label: "译 [缓存]", color: "green" };
+  }
+  return { label: "译", color: "green" };
 }
 
 function getShortTranslationError(message: DisplayMessage): string {
@@ -104,49 +114,52 @@ export function flattenTranscript(messages: DisplayMessage[], width: number): Tr
   const lines: TranscriptLine[] = [];
 
   for (const message of messages) {
-    const englishLabel = message.role === "user" ? "You>" : "AI >";
-    const englishColor = message.role === "user" ? "cyan" : "white";
-    lines.push(
-      ...renderLabeledLines(
-        `${message.messageId}:original`,
-        englishLabel,
-        message.originalText,
-        englishColor,
-        width,
-      ),
-    );
+    if (message.role === "user") {
+      lines.push(
+        ...renderLabeledLines(
+          `${message.messageId}:original`,
+          "你",
+          message.originalText,
+          "blueBright",
+          width,
+        ),
+      );
+      lines.push({
+        key: `${message.messageId}:separator`,
+        text: "",
+      });
+      continue;
+    }
 
-    if (message.role === "assistant") {
-      if (message.translatedText) {
-        const translated = getTranslationPrefix(message);
-        lines.push(
-          ...renderLabeledLines(
-            `${message.messageId}:translated`,
-            translated.label,
-            message.translatedText,
-            translated.color,
-            width,
-          ),
-        );
-      } else if (message.translationStatus === "scheduled") {
-        lines.push({
-          key: `${message.messageId}:status`,
-          text: "ZH ~ [queued]",
-          color: "yellow",
-        });
-      } else if (message.translationStatus === "translating") {
-        lines.push({
-          key: `${message.messageId}:status`,
-          text: "ZH ~ [translating]",
-          color: "yellow",
-        });
-      } else if (message.translationStatus === "failed") {
-        lines.push({
-          key: `${message.messageId}:status`,
-          text: `ZH ! [failed: ${getShortTranslationError(message)}]`,
-          color: "red",
-        });
-      }
+    if (message.displayText) {
+      const rendered = getAssistantLabel(message);
+      lines.push(
+        ...renderLabeledLines(
+          `${message.messageId}:display`,
+          rendered.label,
+          message.displayText,
+          rendered.color,
+          width,
+        ),
+      );
+    } else if (message.translationStatus === "scheduled") {
+      lines.push({
+        key: `${message.messageId}:status`,
+        text: "状态 [等待生成]",
+        color: "yellow",
+      });
+    } else if (message.translationStatus === "translating") {
+      lines.push({
+        key: `${message.messageId}:status`,
+        text: "状态 [生成中]",
+        color: "yellow",
+      });
+    } else if (message.translationStatus === "failed") {
+      lines.push({
+        key: `${message.messageId}:status`,
+        text: `状态 [失败: ${getShortTranslationError(message)}]`,
+        color: "red",
+      });
     }
 
     lines.push({
@@ -162,8 +175,8 @@ function SessionListView(props: { sessions: SessionDescriptor[]; selectedIndex: 
   if (props.sessions.length === 0) {
     return (
       <Box flexDirection="column">
-        <Text color="yellow">No matching sessions found yet.</Text>
-        <Text dimColor>Start `codex` or `claude`, or use the wrapper commands with `--tui`.</Text>
+        <Text color="yellow">还没有匹配的会话。</Text>
+        <Text dimColor>先启动 `codex` 或 `claude`，或直接使用带 `--tui` 的包装命令。</Text>
       </Box>
     );
   }
@@ -172,20 +185,20 @@ function SessionListView(props: { sessions: SessionDescriptor[]; selectedIndex: 
     <Box flexDirection="column">
       {props.sessions.map((session, index) => {
         const selected = index === props.selectedIndex;
-        const marker = selected ? ">" : " ";
-        const live = session.live ? "live" : "idle";
-        const line = [
-          marker,
-          `[${session.provider}]`,
-          session.title,
-          `(${session.sessionId.slice(-8)})`,
-          `· ${formatRelativeTime(session.lastActivityMs)}`,
-          `· ${live}`,
-        ].join(" ");
+        const marker = selected ? "›" : " ";
+        const live = session.live ? "进行中" : "空闲";
         return (
-          <Text key={session.filePath} inverse={selected}>
-            {line}
-          </Text>
+          <Box key={session.filePath}>
+            <Text {...(selected ? { inverse: true } : {})}>{marker} </Text>
+            <Text color={getProviderColor(session.provider)} {...(selected ? { inverse: true } : {})}>
+              [{session.provider}]
+            </Text>
+            <Text {...(selected ? { inverse: true } : {})}> {session.title}</Text>
+            <Text dimColor {...(selected ? { inverse: true } : {})}>
+              {" "}
+              ({session.sessionId.slice(-8)}) · {formatRelativeTime(session.lastActivityMs)} · {live}
+            </Text>
+          </Box>
         );
       })}
     </Box>
@@ -196,28 +209,24 @@ function SessionDetailView(props: {
   descriptor: SessionDescriptor;
   snapshot: SessionSnapshot | null;
   messages: DisplayMessage[];
-  scrollOffset: number;
-  visibleHeight: number;
 }): React.JSX.Element {
   const transcriptLines = flattenTranscript(props.messages, (process.stdout.columns ?? 100) - 4);
-  const maxOffset = Math.max(0, transcriptLines.length - props.visibleHeight);
-  const start = Math.min(props.scrollOffset, maxOffset);
-  const visibleLines = transcriptLines.slice(start, start + props.visibleHeight);
 
   return (
     <Box flexDirection="column">
       <Text>
-        [{props.descriptor.provider}] {props.descriptor.title}
+        <Text color={getProviderColor(props.descriptor.provider)}>[{props.descriptor.provider}]</Text>{" "}
+        {props.descriptor.title}
       </Text>
       <Text dimColor>
         {props.descriptor.sessionId} · {props.descriptor.cwd}
       </Text>
-      <Text dimColor>ctrl+c/q quit · b back · j/k or arrows scroll</Text>
+      <Text dimColor>ctrl+c/q 退出 · b 返回列表 · 使用终端原生滚动浏览</Text>
       <Text dimColor>
-        {props.snapshot ? `${props.snapshot.messages.length} messages` : "Loading transcript..."}
+        {props.snapshot ? `${props.snapshot.messages.length} 条消息` : "正在加载会话..."}
       </Text>
       <Box flexDirection="column" marginTop={1}>
-        {visibleLines.map((line) => (
+        {transcriptLines.map((line) => (
           <Text key={line.key} {...(line.color ? { color: line.color } : {})}>
             {line.text || " "}
           </Text>
@@ -235,8 +244,6 @@ export function App(props: AppProps): React.JSX.Element {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(props.sessionId ?? null);
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
-  const [scrollOffset, setScrollOffset] = useState(0);
-  const [followTail, setFollowTail] = useState(true);
 
   const visibleSessions = useMemo(() => {
     if (!props.provider) {
@@ -337,21 +344,6 @@ export function App(props: AppProps): React.JSX.Element {
     };
   }, [selectedDescriptor]);
 
-  const transcriptLines = useMemo(
-    () => flattenTranscript(messages, (process.stdout.columns ?? 100) - 4),
-    [messages],
-  );
-  const visibleHeight = Math.max(8, (process.stdout.rows ?? 24) - 8);
-  const maxScrollOffset = Math.max(0, transcriptLines.length - visibleHeight);
-
-  useEffect(() => {
-    if (followTail) {
-      setScrollOffset(maxScrollOffset);
-      return;
-    }
-    setScrollOffset((current) => Math.min(current, maxScrollOffset));
-  }, [followTail, maxScrollOffset]);
-
   useInput((input, key) => {
     if (key.ctrl && input === "c") {
       exit();
@@ -377,7 +369,6 @@ export function App(props: AppProps): React.JSX.Element {
         if (next) {
           setSelectedSessionId(next.sessionId);
           setView("detail");
-          setFollowTail(true);
         }
       }
       return;
@@ -386,37 +377,19 @@ export function App(props: AppProps): React.JSX.Element {
     if (input === "b") {
       setView("list");
       setSelectedSessionId(null);
-      setFollowTail(true);
-      return;
-    }
-
-    if (key.upArrow || input === "k") {
-      setFollowTail(false);
-      setScrollOffset((current) => Math.max(0, current - 1));
-      return;
-    }
-
-    if (key.downArrow || input === "j") {
-      setScrollOffset((current) => {
-        const next = Math.min(maxScrollOffset, current + 1);
-        if (next >= maxScrollOffset) {
-          setFollowTail(true);
-        }
-        return next;
-      });
     }
   });
 
   if (view === "waiting") {
     return (
       <Box flexDirection="column">
-        <Text color="yellow">Waiting for a matching session…</Text>
+        <Text color="yellow">正在等待匹配的会话…</Text>
         <Text dimColor>
           {props.provider ? `provider=${props.provider}` : "provider=any"}{" "}
           {props.sessionId ? `session=${props.sessionId}` : "latest=true"}
         </Text>
         {props.cwd ? <Text dimColor>cwd={props.cwd}</Text> : null}
-        <Text dimColor>ctrl+c/q quit · b back</Text>
+        <Text dimColor>ctrl+c/q 退出 · b 返回列表</Text>
       </Box>
     );
   }
@@ -427,8 +400,6 @@ export function App(props: AppProps): React.JSX.Element {
         descriptor={selectedDescriptor}
         snapshot={snapshot}
         messages={messages}
-        scrollOffset={scrollOffset}
-        visibleHeight={visibleHeight}
       />
     );
   }
@@ -436,12 +407,12 @@ export function App(props: AppProps): React.JSX.Element {
   return (
     <Box flexDirection="column">
       <Text>Agent Translator TUI</Text>
-      <Text dimColor>ctrl+c/q quit · arrows/j/k move · Enter attach</Text>
+      <Text dimColor>ctrl+c/q 退出 · 方向键选择 · Enter 进入</Text>
       <Text dimColor>
         {props.provider ? `filter=${props.provider}` : "filter=all"}
         {props.cwd ? ` · cwd=${props.cwd}` : ""}
         {" · "}
-        {visibleSessions.length} sessions
+        {visibleSessions.length} 个会话
       </Text>
       <Box marginTop={1}>
         <SessionListView sessions={visibleSessions} selectedIndex={selectedIndex} />

@@ -1,15 +1,47 @@
-import type { TranslatorConfig } from "../types.js";
+import type { DisplayMode, MessageKind, ParsedMessage, TranslatorConfig } from "../types.js";
 
-const SYSTEM_PROMPT = [
+const TRANSLATE_PROMPT = [
   "Translate the assistant message into concise Simplified Chinese.",
-  "Keep code blocks, commands, file paths, JSON, stack traces, and identifiers unchanged.",
-  "Do not add explanations.",
+  "Do not output the original English text.",
+  "Preserve markdown structure when practical, especially tables.",
   "Do not use internet slang, filler, or emotional phrasing.",
   "Tone: neutral, technical, direct.",
 ].join(" ");
 
-export function getTranslationSystemPrompt(): string {
-  return SYSTEM_PROMPT;
+const SUMMARIZE_PROMPT = [
+  "Write a concise Simplified Chinese summary of the assistant content.",
+  "Use 1 to 3 short sentences.",
+  "Do not output the original English text.",
+  "Do not repeat raw code, commands, diffs, file paths, JSON, or stack traces verbatim unless absolutely necessary.",
+  "Explain only what was done, why, or the result.",
+  "Tone: neutral, technical, direct.",
+].join(" ");
+
+export function getGenerationSystemPrompt(kind: MessageKind, displayMode: DisplayMode): string {
+  if (displayMode === "summarize") {
+    if (kind === "command") {
+      return `${SUMMARIZE_PROMPT} Focus on what the command does.`;
+    }
+    if (kind === "diff") {
+      return `${SUMMARIZE_PROMPT} Focus on the key changes in the diff.`;
+    }
+    if (kind === "tool") {
+      return `${SUMMARIZE_PROMPT} Focus on which tool was called and for what purpose.`;
+    }
+    if (kind === "shell") {
+      return `${SUMMARIZE_PROMPT} Focus on the execution result or conclusion.`;
+    }
+    if (kind === "code") {
+      return `${SUMMARIZE_PROMPT} Focus on the code change or technical intent.`;
+    }
+    return SUMMARIZE_PROMPT;
+  }
+
+  if (kind === "table") {
+    return `${TRANSLATE_PROMPT} Preserve the table layout when practical; if the table is too complex, produce a concise Chinese summary instead.`;
+  }
+
+  return TRANSLATE_PROMPT;
 }
 
 function extractResponseText(payload: unknown): string | null {
@@ -69,10 +101,12 @@ export class TranslatorClient {
     this.fetchImpl = fetchImpl;
   }
 
-  public async translate(originalText: string): Promise<string> {
+  public async generate(message: Pick<ParsedMessage, "originalText" | "kind" | "displayMode">): Promise<string> {
     if (!this.config.apiKey) {
       throw new Error("AGENT_TRANSLATOR_API_KEY is not set");
     }
+
+    const systemPrompt = getGenerationSystemPrompt(message.kind, message.displayMode);
 
     const response = await this.fetchImpl(`${this.config.baseUrl}/responses`, {
       method: "POST",
@@ -86,11 +120,11 @@ export class TranslatorClient {
         input: [
           {
             role: "system",
-            content: [{ type: "input_text", text: SYSTEM_PROMPT }],
+            content: [{ type: "input_text", text: systemPrompt }],
           },
           {
             role: "user",
-            content: [{ type: "input_text", text: originalText }],
+            content: [{ type: "input_text", text: message.originalText }],
           },
         ],
       }),
@@ -109,4 +143,3 @@ export class TranslatorClient {
     return text;
   }
 }
-

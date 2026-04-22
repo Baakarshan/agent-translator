@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { buildTerminalScript } from "./launcher.js";
+import { buildGhosttyOpenArgs, buildTerminalAppleScript, buildTerminalScript, GHOSTTY_APP_PATH } from "./launcher.js";
 
 describe("buildTerminalScript", () => {
   test("builds a macOS terminal command for codex and claude", () => {
@@ -18,5 +18,31 @@ describe("buildTerminalScript", () => {
     expect(claudeScript).toContain("claude");
     expect(claudeScript).toContain("--cwd");
     expect(claudeScript).toContain("/tmp/claude-project");
+  });
+});
+
+describe("buildGhosttyOpenArgs", () => {
+  test("builds Ghostty-first launcher args", () => {
+    const args = buildGhosttyOpenArgs("codex", "/tmp/codex-project");
+    expect(args).toEqual([
+      "-na",
+      GHOSTTY_APP_PATH,
+      "--args",
+      "-e",
+      "zsh",
+      "-lc",
+      expect.stringContaining("--provider"),
+    ]);
+    expect(args.at(-1)).toContain("/tmp/codex-project");
+  });
+});
+
+describe("buildTerminalAppleScript", () => {
+  test("builds a Terminal fallback AppleScript", () => {
+    const script = buildTerminalAppleScript("claude", "/tmp/claude-project");
+    expect(script).toContain('tell application "Terminal" to do script');
+    expect(script).toContain("claude");
+    expect(script).toContain("--cwd");
+    expect(script).toContain("/tmp/claude-project");
   });
 });
