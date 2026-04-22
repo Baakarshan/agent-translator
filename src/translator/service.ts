@@ -28,6 +28,48 @@ function isLikelyChineseText(text: string): boolean {
   return cjkMatches.length >= 6 && cjkMatches.length >= latinMatches.length;
 }
 
+function buildLocalDisplayText(message: ParsedMessage): string | null {
+  if (message.displayMode !== "summarize") {
+    return null;
+  }
+
+  const normalized = message.originalText.toLowerCase();
+
+  if (message.kind === "command") {
+    if (normalized.includes("agent-translator tui")) {
+      return "给出了一条打开翻译 TUI 的命令。";
+    }
+    if (normalized.includes("npm run verify")) {
+      return "给出了一条运行项目校验流程的命令。";
+    }
+    if (normalized.includes("git")) {
+      return "给出了一条 Git 相关命令。";
+    }
+    return "给出了一条命令示例。";
+  }
+
+  if (message.kind === "code") {
+    return "给出了一段代码示例。";
+  }
+
+  if (message.kind === "diff") {
+    return "展示了一段改动差异。";
+  }
+
+  if (message.kind === "shell") {
+    if (normalized.includes("error:") || normalized.includes("traceback") || normalized.includes("npm err!")) {
+      return "展示了一段报错或异常输出。";
+    }
+    return "展示了一段命令执行结果。";
+  }
+
+  if (message.kind === "tool") {
+    return "调用了一个工具来完成当前操作。";
+  }
+
+  return null;
+}
+
 export class TranscriptTranslationStore extends EventEmitter {
   private readonly config: TranslatorConfig;
   private readonly translator: TranslatorClient;
@@ -127,6 +169,8 @@ export class TranscriptTranslationStore extends EventEmitter {
 
       this.messageStates.set(message.messageId, {
         ...toDisplayMessage(message),
+        summaryText: message.displayMode === "summarize" ? buildLocalDisplayText(message) : null,
+        displayText: buildLocalDisplayText(message),
         translationStatus: "scheduled",
         fingerprint,
       });

@@ -191,4 +191,38 @@ describe("TranscriptTranslationStore", () => {
     expect(generate).not.toHaveBeenCalled();
     store.destroy();
   });
+
+  test("shows a local placeholder summary immediately for technical blocks", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
+    const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    let resolveTranslation: ((value: string) => void) | null = null;
+    const generate = vi.fn().mockImplementation(() => new Promise<string>((resolve) => {
+      resolveTranslation = resolve;
+    }));
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache,
+      translator: { generate } as any,
+    });
+
+    await store.setMessages([
+      {
+        ...createMessage("msg-1", "```bash\nagent-translator tui --latest --provider codex\n```"),
+        kind: "command",
+        displayMode: "summarize",
+      },
+    ]);
+
+    const immediate = store.getMessages()[0];
+    expect(immediate?.displayText).toBe("给出了一条打开翻译 TUI 的命令。");
+    expect(immediate?.translationStatus).toBe("scheduled");
+
+    await waitForCondition(() => generate.mock.calls.length === 1);
+    resolveTranslation?.("该命令会打开最新的 Codex 翻译 TUI。");
+    await waitForCondition(() => store.getMessages()[0]?.translationStatus === "translated");
+
+    const final = store.getMessages()[0];
+    expect(final?.displayText).toBe("该命令会打开最新的 Codex 翻译 TUI。");
+    store.destroy();
+  });
 });
