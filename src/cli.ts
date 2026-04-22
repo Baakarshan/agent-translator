@@ -36,7 +36,7 @@ export function parseWrappedProviderArgv(argv: string[]): { openTui: boolean; ar
 
 async function runWrappedProvider(provider: ProviderId, args: string[], openTui: boolean): Promise<void> {
   if (openTui) {
-    await openTuiTerminal(provider);
+    await openTuiTerminal(provider, process.cwd());
   }
 
   const exitCode = await runProviderBinary(provider, args);
@@ -47,11 +47,13 @@ async function renderTui(options: {
   provider?: ProviderId | undefined;
   latest?: boolean | undefined;
   session?: string | undefined;
+  cwd?: string | undefined;
 }): Promise<void> {
   const props = {
     ...(options.provider ? { provider: options.provider } : {}),
     ...(options.latest ? { latest: options.latest } : {}),
     ...(options.session ? { sessionId: options.session } : {}),
+    ...(options.cwd ? { cwd: options.cwd } : {}),
   };
   const instance = render(
     React.createElement(App, props),
@@ -81,7 +83,8 @@ async function main(): Promise<void> {
     .option("--latest", "Attach to the latest matching session")
     .option("--provider <provider>", "Provider filter", (value: string) => value as ProviderId)
     .option("--session <id>", "Attach to a specific session id")
-    .action(async (options: { latest?: boolean; provider?: ProviderId; session?: string }) => {
+    .option("--cwd <path>", "Limit session matching to a working directory")
+    .action(async (options: { latest?: boolean; provider?: ProviderId; session?: string; cwd?: string }) => {
       await renderTui(options);
     });
 

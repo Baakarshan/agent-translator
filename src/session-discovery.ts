@@ -14,7 +14,12 @@ type SessionSelector = {
   provider?: ProviderId | undefined;
   latest?: boolean | undefined;
   sessionId?: string | undefined;
+  cwd?: string | undefined;
 };
+
+function normalizeCwd(cwd: string): string {
+  return path.resolve(cwd);
+}
 
 async function walkFiles(root: string): Promise<string[]> {
   const results: string[] = [];
@@ -89,9 +94,13 @@ export function selectSessionDescriptor(
   sessions: SessionDescriptor[],
   selector: SessionSelector,
 ): SessionDescriptor | null {
-  const filtered = selector.provider
+  const filteredByProvider = selector.provider
     ? sessions.filter((session) => session.provider === selector.provider)
     : sessions;
+  const targetCwd = selector.cwd ? normalizeCwd(selector.cwd) : null;
+  const filtered = targetCwd
+    ? filteredByProvider.filter((session) => normalizeCwd(session.cwd) === targetCwd)
+    : filteredByProvider;
 
   if (selector.sessionId) {
     return filtered.find((session) => session.sessionId === selector.sessionId) ?? null;

@@ -11,6 +11,7 @@ type AppProps = {
   provider?: ProviderId | undefined;
   latest?: boolean | undefined;
   sessionId?: string | undefined;
+  cwd?: string | undefined;
 };
 
 type ViewState = "list" | "detail" | "waiting";
@@ -227,6 +228,7 @@ export function App(props: AppProps): React.JSX.Element {
       return selectSessionDescriptor(sessions, {
         provider: props.provider,
         latest: true,
+        cwd: props.cwd,
       });
     }
 
@@ -235,13 +237,14 @@ export function App(props: AppProps): React.JSX.Element {
         sessions.find(
           (session) =>
             session.sessionId === selectedSessionId &&
-            (!props.provider || session.provider === props.provider),
+            (!props.provider || session.provider === props.provider) &&
+            (!props.cwd || session.cwd === props.cwd),
         ) ?? null
       );
     }
 
     return visibleSessions[selectedIndex] ?? null;
-  }, [props.latest, props.provider, selectedIndex, selectedSessionId, sessions, visibleSessions]);
+  }, [props.cwd, props.latest, props.provider, selectedIndex, selectedSessionId, sessions, visibleSessions]);
 
   useEffect(() => {
     const index = new SessionIndex(props.provider);
@@ -385,6 +388,7 @@ export function App(props: AppProps): React.JSX.Element {
           {props.provider ? `provider=${props.provider}` : "provider=any"}{" "}
           {props.sessionId ? `session=${props.sessionId}` : "latest=true"}
         </Text>
+        {props.cwd ? <Text dimColor>cwd={props.cwd}</Text> : null}
         <Text dimColor>q quit · b back</Text>
       </Box>
     );
@@ -407,7 +411,10 @@ export function App(props: AppProps): React.JSX.Element {
       <Text>Agent Translator TUI</Text>
       <Text dimColor>q quit · arrows/j/k move · Enter attach</Text>
       <Text dimColor>
-        {props.provider ? `filter=${props.provider}` : "filter=all"} · {visibleSessions.length} sessions
+        {props.provider ? `filter=${props.provider}` : "filter=all"}
+        {props.cwd ? ` · cwd=${props.cwd}` : ""}
+        {" · "}
+        {visibleSessions.length} sessions
       </Text>
       <Box marginTop={1}>
         <SessionListView sessions={visibleSessions} selectedIndex={selectedIndex} />

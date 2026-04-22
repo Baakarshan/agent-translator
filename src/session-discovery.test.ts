@@ -58,6 +58,16 @@ describe("session discovery", () => {
         live: true,
       },
       {
+        provider: "claude",
+        sessionId: "claude-2",
+        filePath: "/tmp/c",
+        cwd: "/tmp/project",
+        title: "claude project",
+        lastActivityAt: "2026-04-22T00:02:00.000Z",
+        lastActivityMs: 3,
+        live: true,
+      },
+      {
         provider: "codex",
         sessionId: "codex-1",
         filePath: "/tmp/b",
@@ -75,5 +85,8 @@ describe("session discovery", () => {
       selectSessionDescriptor(sessions, { provider: "codex", latest: true })?.sessionId,
     ).toBe("codex-1");
     expect(selectSessionDescriptor(sessions, { sessionId: "claude-1" })?.provider).toBe("claude");
+    expect(
+      selectSessionDescriptor(sessions, { provider: "claude", latest: true, cwd: "/tmp/project" })?.sessionId,
+    ).toBe("claude-2");
   });
 });

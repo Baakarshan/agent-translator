@@ -13,16 +13,16 @@ export function buildSelfCommand(args: string[]): string {
   return command.map(shellEscape).join(" ");
 }
 
-export function buildTerminalScript(provider: ProviderId): string {
-  return buildSelfCommand(["tui", "--latest", "--provider", provider]);
+export function buildTerminalScript(provider: ProviderId, cwd: string): string {
+  return buildSelfCommand(["tui", "--latest", "--provider", provider, "--cwd", cwd]);
 }
 
-export async function openTuiTerminal(provider: ProviderId): Promise<void> {
+export async function openTuiTerminal(provider: ProviderId, cwd: string): Promise<void> {
   if (process.platform !== "darwin") {
     throw new Error("Automatic TUI terminal launching is only supported on macOS");
   }
 
-  const command = buildTerminalScript(provider).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const command = buildTerminalScript(provider, cwd).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   const script = `tell application "Terminal" to do script "${command}"`;
 
   await new Promise<void>((resolve, reject) => {
