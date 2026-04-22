@@ -102,6 +102,20 @@ function withScope(label: string, workdir: string | null): string {
   return scope ? `${label} · ${scope}` : label;
 }
 
+function withCommand(label: string, commandKeyword: string, workdir: string | null): string {
+  const parts = [label, commandKeyword];
+  const scope = formatLocation(workdir, null, "path");
+  if (scope) {
+    parts.push(scope);
+  }
+  return parts.join(" · ");
+}
+
+function extractNpmRunScript(command: string): string | null {
+  const match = command.match(/(?:^|\s)run\s+([A-Za-z0-9:_-]+)/);
+  return match?.[1] ?? null;
+}
+
 function parseCommandEntry(entry: string): { workdir: string | null; command: string } {
   const separatorIndex = entry.indexOf("\u0000");
   if (separatorIndex === -1) {
@@ -119,34 +133,44 @@ function summarizeCommandLine(entry: string): string {
   const normalized = command.toLowerCase();
 
   if (normalized.includes("agent-translator tui")) {
-    return withScope("打开 TUI", workdir);
+    return withCommand("打开 TUI", "agent-translator tui", workdir);
   }
   if (normalized.startsWith("npm ") || normalized.includes(" npm ")) {
-    if (normalized.includes("run verify")) {
-      return withScope("校验", workdir);
+    const npmScript = extractNpmRunScript(command);
+    if (npmScript === "verify") {
+      return withCommand("运行校验", "npm run verify", workdir);
     }
-    if (normalized.includes("run test")) {
-      return withScope("测试", workdir);
+    if (npmScript === "test") {
+      return withCommand("运行测试", "npm run test", workdir);
     }
-    if (normalized.includes("run build")) {
-      return withScope("构建", workdir);
+    if (npmScript === "build") {
+      return withCommand("执行构建", "npm run build", workdir);
     }
-    return withScope("脚本", workdir);
+    if (npmScript === "typecheck") {
+      return withCommand("类型检查", "npm run typecheck", workdir);
+    }
+    if (npmScript === "install:global") {
+      return withCommand("全局安装", "npm run install:global", workdir);
+    }
+    if (npmScript) {
+      return withCommand("运行脚本", `npm run ${npmScript}`, workdir);
+    }
+    return withCommand("npm", "npm", workdir);
   }
   if (normalized.startsWith("git ") || normalized.includes(" git ")) {
     if (normalized.includes("status")) {
-      return withScope("Git 状态", workdir);
+      return withCommand("Git 状态", "git status", workdir);
     }
     if (normalized.includes("diff")) {
-      return withScope("Git 差异", workdir);
+      return withCommand("Git 差异", "git diff", workdir);
     }
     if (normalized.includes("add ")) {
-      return withScope("Git 暂存", workdir);
+      return withCommand("Git 暂存", "git add", workdir);
     }
     if (normalized.includes("commit")) {
-      return withScope("Git 提交", workdir);
+      return withCommand("Git 提交", "git commit", workdir);
     }
-    return withScope("Git", workdir);
+    return withCommand("Git", shortenKeyword(command, 20), workdir);
   }
   if (normalized.startsWith("rg ") || normalized.includes(" rg ")) {
     const match = command.match(/(?:^|\s)rg(?:\s+-\S+|\s+--\S+(?:=\S+)*)*\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))(?:\s+(.+))?$/);
@@ -169,10 +193,10 @@ function summarizeCommandLine(entry: string): string {
     return target ? `查看 · ${target}` : withScope("查看片段", workdir);
   }
   if (normalized.startsWith("node ") || normalized.includes("node --input-type=module")) {
-    return withScope("Node 脚本", workdir);
+    return withCommand("Node 脚本", "node", workdir);
   }
   if (normalized.startsWith("osascript ") || normalized.includes("tell application \"terminal\"")) {
-    return "Terminal 窗口";
+    return "Terminal 窗口 · osascript";
   }
   if (normalized.startsWith("sleep ")) {
     const seconds = command.match(/sleep\s+([0-9.]+)/)?.[1];

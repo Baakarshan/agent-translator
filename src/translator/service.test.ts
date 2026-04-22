@@ -211,7 +211,7 @@ describe("TranscriptTranslationStore", () => {
     ]);
 
     const immediate = store.getMessages()[0];
-    expect(immediate?.displayText).toBe("打开 TUI");
+    expect(immediate?.displayText).toBe("打开 TUI · agent-translator tui");
     expect(immediate?.translationStatus).toBe("cached");
     expect(generate).not.toHaveBeenCalled();
     store.destroy();
@@ -236,7 +236,7 @@ describe("TranscriptTranslationStore", () => {
     ]);
 
     const message = store.getMessages()[0];
-    expect(message?.displayText).toBe("测试\nGit 状态\nTerminal 窗口");
+    expect(message?.displayText).toBe("运行测试 · npm run test\nGit 状态 · git status\nTerminal 窗口 · osascript");
     expect(message?.translationStatus).toBe("cached");
     expect(generate).not.toHaveBeenCalled();
     store.destroy();
@@ -272,7 +272,7 @@ describe("TranscriptTranslationStore", () => {
     ]);
 
     const messages = store.getMessages();
-    expect(messages[0]?.displayText).toBe("构建 · .../products/agent-translator");
+    expect(messages[0]?.displayText).toBe("执行构建 · npm run build · .../products/agent-translator");
     expect(messages[1]?.displayText).toBe(
       "修改了 .../agent-translator/src/tui/app.tsx、.../agent-translator/README.md。",
     );
@@ -337,7 +337,34 @@ describe("TranscriptTranslationStore", () => {
     ]);
 
     const message = store.getMessages()[0];
-    expect(message?.displayText).toBe("Node 脚本 · .../products/agent-translator");
+    expect(message?.displayText).toBe("Node 脚本 · node · .../products/agent-translator");
+    expect(generate).not.toHaveBeenCalled();
+    store.destroy();
+  });
+
+  test("recognizes npm scripts even when npm flags come first", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
+    const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    const generate = vi.fn();
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache,
+      translator: { generate } as any,
+    });
+
+    await store.setMessages([
+      {
+        ...createMessage(
+          "msg-1",
+          "/Users/baakarshan/Developer/products/agent-translator\u0000npm --cache /tmp/agent-translator-npm-cache -C /Users/baakarshan/Developer/products/agent-translator run typecheck",
+        ),
+        kind: "command",
+        displayMode: "summarize",
+      },
+    ]);
+
+    const message = store.getMessages()[0];
+    expect(message?.displayText).toBe("类型检查 · npm run typecheck · .../products/agent-translator");
     expect(generate).not.toHaveBeenCalled();
     store.destroy();
   });
