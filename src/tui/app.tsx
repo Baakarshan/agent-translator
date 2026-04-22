@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 
 import { getTranslatorConfig } from "../config.js";
@@ -348,6 +348,19 @@ export function flattenTranscript(messages: DisplayMessage[], width: number): Tr
   return lines;
 }
 
+export function getTranscriptRenderKey(snapshot: SessionSnapshot | null, messages: DisplayMessage[]): string {
+  const snapshotKey = snapshot ? [snapshot.sessionId, snapshot.messages.length].join("\u0000") : "null";
+  const messageKey = messages
+    .map((message) => [
+      message.messageId,
+      message.translationStatus,
+      message.displayText ?? "",
+      message.translationError ?? "",
+    ].join("\u0000"))
+    .join("\u0001");
+  return `${snapshotKey}\u0002${messageKey}`;
+}
+
 export function getDescriptorWatchKey(descriptor: SessionDescriptor | null): string | null {
   if (!descriptor) {
     return null;
@@ -390,6 +403,7 @@ const SessionDetailView = React.memo(function SessionDetailView(props: {
   descriptor: SessionDescriptor;
   snapshot: SessionSnapshot | null;
   messages: DisplayMessage[];
+  hasPendingUpdates: boolean;
 }): React.JSX.Element {
   const transcriptLines = flattenTranscript(props.messages, (process.stdout.columns ?? 100) - 4);
 
@@ -402,7 +416,12 @@ const SessionDetailView = React.memo(function SessionDetailView(props: {
       <Text dimColor>
         {props.descriptor.sessionId} · {props.descriptor.cwd}
       </Text>
-      <Text dimColor>ctrl+c/q 退出 · b 返回列表 · 使用终端原生滚动浏览</Text>
+      <Text dimColor>ctrl+c/q 退出 · b 返回列表 · f 同步最新 · 使用终端原生滚动浏览</Text>
+      {props.hasPendingUpdates ? (
+        <Text color="#fbbf24">当前视图已固定 · 有新内容 · 按 f 同步最新</Text>
+      ) : (
+        <Text dimColor>当前视图固定；新内容不会打断你正在看的位置</Text>
+      )}
       <Text dimColor>
         {props.snapshot ? `${props.snapshot.messages.length} 条消息` : "正在加载会话..."}
       </Text>
@@ -427,8 +446,12 @@ export function App(props: AppProps): React.JSX.Element {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(props.sessionId ?? null);
   const [attachedDescriptor, setAttachedDescriptor] = useState<SessionDescriptor | null>(null);
-  const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
-  const [messages, setMessages] = useState<DisplayMessage[]>([]);
+  const [liveSnapshot, setLiveSnapshot] = useState<SessionSnapshot | null>(null);
+  const [liveMessages, setLiveMessages] = useState<DisplayMessage[]>([]);
+  const [visibleSnapshot, setVisibleSnapshot] = useState<SessionSnapshot | null>(null);
+  const [visibleMessages, setVisibleMessages] = useState<DisplayMessage[]>([]);
+  const [hasPendingUpdates, setHasPendingUpdates] = useState(false);
+  const detailInitializedRef = useRef(false);
 
   const visibleSessions = useMemo(() => {
     if (!props.provider) {
@@ -502,9 +525,65 @@ export function App(props: AppProps): React.JSX.Element {
   }, [selectedIndex, visibleSessions.length]);
 
   useEffect(() => {
+    detailInitializedRef.current = false;
+    setLiveSnapshot(null);
+    setLiveMessages([]);
+    setVisibleSnapshot(null);
+    setVisibleMessages([]);
+    setHasPendingUpdates(false);
+  }, [selectedDescriptorWatchKey]);
+
+  const liveRenderKey = useMemo(
+    () => getTranscriptRenderKey(liveSnapshot, liveMessages),
+    [liveMessages, liveSnapshot],
+  );
+  const visibleRenderKey = useMemo(
+    () => getTranscriptRenderKey(visibleSnapshot, visibleMessages),
+    [visibleMessages, visibleSnapshot],
+  );
+
+  useEffect(() => {
+    if (!selectedDescriptor || view !== "detail") {
+      return;
+    }
+
+    if (!detailInitializedRef.current) {
+      const snapshotMessageCount = liveSnapshot?.messages.length ?? 0;
+      const hasLoadedInitialTranscript = snapshotMessageCount === 0
+        ? Boolean(liveSnapshot) || liveMessages.length > 0
+        : liveMessages.length === snapshotMessageCount;
+
+      if (!hasLoadedInitialTranscript) {
+        return;
+      }
+      detailInitializedRef.current = true;
+      setVisibleSnapshot(liveSnapshot);
+      setVisibleMessages(liveMessages);
+      setHasPendingUpdates(false);
+      return;
+    }
+
+    if (liveRenderKey === visibleRenderKey) {
+      setHasPendingUpdates(false);
+      return;
+    }
+
+    setHasPendingUpdates(true);
+  }, [
+    liveMessages,
+    liveRenderKey,
+    liveSnapshot,
+    selectedDescriptor,
+    view,
+    visibleMessages,
+    visibleRenderKey,
+    visibleSnapshot,
+  ]);
+
+  useEffect(() => {
     if (!selectedDescriptor) {
-      setSnapshot(null);
-      setMessages([]);
+      setLiveSnapshot(null);
+      setLiveMessages([]);
       return;
     }
 
@@ -516,7 +595,7 @@ export function App(props: AppProps): React.JSX.Element {
       if (!active) {
         return;
       }
-      setMessages(nextMessages);
+      setLiveMessages(nextMessages);
     };
     store.on("update", updateMessages);
 
@@ -524,7 +603,7 @@ export function App(props: AppProps): React.JSX.Element {
       if (!active) {
         return;
       }
-      setSnapshot(nextSnapshot);
+      setLiveSnapshot(nextSnapshot);
       if (nextSnapshot) {
         void store.setMessages(nextSnapshot.messages);
       } else {
@@ -573,6 +652,14 @@ export function App(props: AppProps): React.JSX.Element {
     if (input === "b") {
       setView("list");
       setSelectedSessionId(null);
+      return;
+    }
+
+    if (input === "f") {
+      detailInitializedRef.current = true;
+      setVisibleSnapshot(liveSnapshot);
+      setVisibleMessages(liveMessages);
+      setHasPendingUpdates(false);
     }
   });
 
@@ -594,8 +681,9 @@ export function App(props: AppProps): React.JSX.Element {
     return (
       <SessionDetailView
         descriptor={detailDescriptor}
-        snapshot={snapshot}
-        messages={messages}
+        snapshot={visibleSnapshot}
+        messages={visibleMessages}
+        hasPendingUpdates={hasPendingUpdates}
       />
     );
   }

@@ -7,6 +7,7 @@ describe("buildTerminalScript", () => {
     const codexScript = buildTerminalScript("codex", "/tmp/codex-project", 123456);
     const claudeScript = buildTerminalScript("claude", "/tmp/claude-project");
 
+    expect(codexScript.startsWith("exec ")).toBe(true);
     expect(codexScript).toContain("tui");
     expect(codexScript).toContain("--latest");
     expect(codexScript).toContain("codex");
@@ -15,6 +16,7 @@ describe("buildTerminalScript", () => {
     expect(codexScript).toContain("--after-ms");
     expect(codexScript).toContain("123456");
 
+    expect(claudeScript.startsWith("exec ")).toBe(true);
     expect(claudeScript).toContain("tui");
     expect(claudeScript).toContain("--latest");
     expect(claudeScript).toContain("claude");

@@ -22,7 +22,7 @@ export function buildTerminalScript(provider: ProviderId, cwd: string, afterMs?:
   if (typeof afterMs === "number") {
     args.push("--after-ms", String(afterMs));
   }
-  return buildSelfCommand(args);
+  return `exec ${buildSelfCommand(args)}`;
 }
 
 export function buildGhosttyOpenArgs(provider: ProviderId, cwd: string, afterMs?: number): string[] {

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import type { DisplayMessage } from "../types.js";
 import type { SessionDescriptor } from "../types.js";
-import { flattenTranscript, getDescriptorWatchKey } from "./app.js";
+import { flattenTranscript, getDescriptorWatchKey, getTranscriptRenderKey } from "./app.js";
 
 function createAssistantMessage(overrides: Partial<DisplayMessage>): DisplayMessage {
   return {
@@ -134,5 +134,62 @@ describe("getDescriptorWatchKey", () => {
     };
 
     expect(getDescriptorWatchKey(base)).toBe(getDescriptorWatchKey(next));
+  });
+});
+
+describe("getTranscriptRenderKey", () => {
+  test("ignores snapshot metadata churn when transcript content is unchanged", () => {
+    const message = createAssistantMessage({
+      displayText: "缓存文本",
+      translationStatus: "cached",
+    });
+
+    const first = getTranscriptRenderKey(
+      {
+        provider: "codex",
+        sessionId: "session-1",
+        filePath: "/tmp/session.jsonl",
+        cwd: "/tmp/project",
+        title: "old title",
+        lastActivityAt: "2026-04-22T00:00:00.000Z",
+        lastActivityMs: 1,
+        live: false,
+        messages: [message],
+      },
+      [message],
+    );
+    const second = getTranscriptRenderKey(
+      {
+        provider: "codex",
+        sessionId: "session-1",
+        filePath: "/tmp/session.jsonl",
+        cwd: "/tmp/project",
+        title: "new title",
+        lastActivityAt: "2026-04-22T00:01:00.000Z",
+        lastActivityMs: 2,
+        live: true,
+        messages: [message],
+      },
+      [message],
+    );
+
+    expect(first).toBe(second);
+  });
+
+  test("changes when visible transcript output changes", () => {
+    const baseMessage = createAssistantMessage({
+      displayText: "第一版",
+      translationStatus: "cached",
+    });
+    const nextMessage = createAssistantMessage({
+      displayText: "第二版",
+      translationStatus: "cached",
+    });
+
+    expect(
+      getTranscriptRenderKey(null, [baseMessage]),
+    ).not.toBe(
+      getTranscriptRenderKey(null, [nextMessage]),
+    );
   });
 });
