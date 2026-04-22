@@ -138,4 +138,38 @@ describe("TranscriptTranslationStore", () => {
     expect(message?.translationStatus).toBe("translated");
     store.destroy();
   });
+
+  test("serializes translation requests for long transcripts", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
+    const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    let concurrent = 0;
+    let maxConcurrent = 0;
+    const generate = vi.fn().mockImplementation(async (message: ParsedMessage) => {
+      concurrent += 1;
+      maxConcurrent = Math.max(maxConcurrent, concurrent);
+      await new Promise((resolve) => setTimeout(resolve, message.messageId === "msg-1" ? 40 : 10));
+      concurrent -= 1;
+      return `${message.originalText} translated`;
+    });
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache,
+      translator: { generate } as any,
+    });
+
+    await store.setMessages([
+      createMessage("msg-1", "First"),
+      createMessage("msg-2", "Second"),
+      createMessage("msg-3", "Third"),
+    ]);
+    await waitForCondition(() => store.getMessages().every((message) => message?.translationStatus === "translated"));
+
+    expect(maxConcurrent).toBe(1);
+    expect(store.getMessages().map((message) => message.displayText)).toEqual([
+      "First translated",
+      "Second translated",
+      "Third translated",
+    ]);
+    store.destroy();
+  });
 });

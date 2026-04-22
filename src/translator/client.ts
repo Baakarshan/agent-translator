@@ -12,7 +12,9 @@ const SUMMARIZE_PROMPT = [
   "Write a concise Simplified Chinese summary of the assistant content.",
   "Use 1 to 3 short sentences.",
   "Do not output the original English text.",
-  "Do not repeat raw code, commands, diffs, file paths, JSON, or stack traces verbatim unless absolutely necessary.",
+  "Do not repeat or quote raw code, commands, flags, diffs, file paths, filenames, line numbers, JSON, function names, or stack traces.",
+  "Do not copy literal shell commands or error lines into the answer.",
+  "Use generic references such as '该命令', '该改动', '这次报错', or '相关文件'.",
   "Explain only what was done, why, or the result.",
   "Tone: neutral, technical, direct.",
 ].join(" ");

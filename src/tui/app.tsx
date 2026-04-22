@@ -12,31 +12,66 @@ type AppProps = {
   latest?: boolean | undefined;
   sessionId?: string | undefined;
   cwd?: string | undefined;
+  afterMs?: number | undefined;
 };
 
 type ViewState = "list" | "detail" | "waiting";
 
 type TranscriptLine = {
   key: string;
+  prefix?: string;
+  prefixColor?: string;
   text: string;
   color?: string;
+  wrap?: "wrap" | "truncate-end";
+};
+
+const THEME = {
+  provider: {
+    codex: "#60a5fa",
+    claude: "#f59e0b",
+  },
+  userLabel: "#60a5fa",
+  userText: "#dbeafe",
+  assistantLabel: "#f59e0b",
+  assistantText: "#f5f5f4",
+  summaryLabel: "#fb923c",
+  summaryText: "#e7e5e4",
+  statusQueued: "#fbbf24",
+  statusFailed: "#f87171",
 };
 
 function getProviderColor(provider: ProviderId): string {
-  return provider === "codex" ? "cyan" : "magenta";
+  return THEME.provider[provider];
 }
 
-function getAssistantLabel(message: DisplayMessage): { label: string; color: string } {
+function getAssistantLabel(message: DisplayMessage): { label: string; labelColor: string; textColor: string } {
   if (message.displayMode === "summarize") {
     if (message.translationStatus === "cached") {
-      return { label: "摘要 [缓存]", color: "cyan" };
+      return {
+        label: "摘要 [缓存]",
+        labelColor: THEME.summaryLabel,
+        textColor: THEME.summaryText,
+      };
     }
-    return { label: "摘要", color: "cyan" };
+    return {
+      label: "摘要",
+      labelColor: THEME.summaryLabel,
+      textColor: THEME.summaryText,
+    };
   }
   if (message.translationStatus === "cached") {
-    return { label: "译 [缓存]", color: "green" };
+    return {
+      label: "译 [缓存]",
+      labelColor: THEME.assistantLabel,
+      textColor: THEME.assistantText,
+    };
   }
-  return { label: "译", color: "green" };
+  return {
+    label: "译",
+    labelColor: THEME.assistantLabel,
+    textColor: THEME.assistantText,
+  };
 }
 
 function getShortTranslationError(message: DisplayMessage): string {
@@ -65,49 +100,171 @@ function formatRelativeTime(lastActivityMs: number): string {
   return `${days}d ago`;
 }
 
-function wrapLine(text: string, width: number): string[] {
-  if (width <= 0 || text.length <= width) {
-    return [text];
-  }
-
-  const lines: string[] = [];
-  let remaining = text;
-  while (remaining.length > width) {
-    lines.push(remaining.slice(0, width));
-    remaining = remaining.slice(width);
-  }
-  if (remaining.length > 0) {
-    lines.push(remaining);
-  }
-  return lines;
-}
-
 function renderLabeledLines(
   keyPrefix: string,
   label: string,
   text: string,
-  color: string,
-  width: number,
+  labelColor: string,
+  textColor: string,
 ): TranscriptLine[] {
   const logicalLines = text.split("\n");
   const prefix = `${label} `;
   const continuationPrefix = " ".repeat(prefix.length);
-  const availableWidth = Math.max(20, width - prefix.length);
   const rendered: TranscriptLine[] = [];
 
   logicalLines.forEach((line, logicalIndex) => {
-    const wrapped = wrapLine(line || " ", availableWidth);
-    wrapped.forEach((chunk, wrappedIndex) => {
-      const currentPrefix = logicalIndex === 0 && wrappedIndex === 0 ? prefix : continuationPrefix;
-      rendered.push({
-        key: `${keyPrefix}:${logicalIndex}:${wrappedIndex}`,
-        text: `${currentPrefix}${chunk}`,
-        color,
-      });
+    const currentPrefix = logicalIndex === 0 ? prefix : continuationPrefix;
+    rendered.push({
+      key: `${keyPrefix}:${logicalIndex}`,
+      prefix: currentPrefix,
+      ...(logicalIndex === 0 ? { prefixColor: labelColor } : {}),
+      text: line || " ",
+      color: textColor,
+      wrap: "wrap",
     });
   });
 
   return rendered;
+}
+
+function textWidth(value: string): number {
+  let width = 0;
+  for (const char of value) {
+    const codePoint = char.codePointAt(0) ?? 0;
+    width += codePoint > 0xff ? 2 : 1;
+  }
+  return width;
+}
+
+function truncateToWidth(value: string, maxWidth: number): string {
+  if (maxWidth <= 0) {
+    return "";
+  }
+  if (textWidth(value) <= maxWidth) {
+    return value;
+  }
+
+  const ellipsis = "…";
+  const targetWidth = Math.max(1, maxWidth - textWidth(ellipsis));
+  let result = "";
+  let currentWidth = 0;
+
+  for (const char of value) {
+    const nextWidth = textWidth(char);
+    if (currentWidth + nextWidth > targetWidth) {
+      break;
+    }
+    result += char;
+    currentWidth += nextWidth;
+  }
+
+  return `${result}${ellipsis}`;
+}
+
+function padCell(value: string, width: number): string {
+  const currentWidth = textWidth(value);
+  if (currentWidth >= width) {
+    return value;
+  }
+  return `${value}${" ".repeat(width - currentWidth)}`;
+}
+
+function parseMarkdownTable(text: string): string[][] | null {
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (lines.length < 2) {
+    return null;
+  }
+
+  const separator = lines[1] ?? "";
+  if (!/^\|?[:\-\s|]+\|?$/.test(separator)) {
+    return null;
+  }
+
+  const rows = lines
+    .filter((_, index) => index !== 1)
+    .map((line) => line.replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim()));
+
+  const columnCount = rows[0]?.length ?? 0;
+  if (columnCount === 0 || rows.some((row) => row.length !== columnCount)) {
+    return null;
+  }
+
+  return rows;
+}
+
+function fitColumnWidths(rows: string[][], maxWidth: number): number[] {
+  const columnCount = rows[0]?.length ?? 0;
+  const widths = Array.from({ length: columnCount }, (_, index) =>
+    Math.max(...rows.map((row) => textWidth(row[index] ?? ""))),
+  );
+  const minColumnWidth = 4;
+  const borderWidth = 3 * columnCount + 1;
+  const maxContentWidth = Math.max(columnCount * minColumnWidth, maxWidth - borderWidth);
+  let totalWidth = widths.reduce((sum, width) => sum + width, 0);
+
+  if (totalWidth <= maxContentWidth) {
+    return widths;
+  }
+
+  const nextWidths = widths.map((width) => Math.max(minColumnWidth, width));
+  totalWidth = nextWidths.reduce((sum, width) => sum + width, 0);
+
+  while (totalWidth > maxContentWidth) {
+    let shrunk = false;
+    for (let index = 0; index < nextWidths.length && totalWidth > maxContentWidth; index += 1) {
+      const currentWidth = nextWidths[index];
+      if (typeof currentWidth === "number" && currentWidth > minColumnWidth) {
+        nextWidths[index] = currentWidth - 1;
+        totalWidth -= 1;
+        shrunk = true;
+      }
+    }
+    if (!shrunk) {
+      break;
+    }
+  }
+
+  return nextWidths;
+}
+
+function renderTableLines(
+  keyPrefix: string,
+  label: string,
+  labelColor: string,
+  textColor: string,
+  tableText: string,
+  width: number,
+): TranscriptLine[] | null {
+  const rows = parseMarkdownTable(tableText);
+  if (!rows) {
+    return null;
+  }
+
+  const prefix = `${label} `;
+  const continuationPrefix = " ".repeat(prefix.length);
+  const availableWidth = Math.max(24, width - textWidth(prefix));
+  const columnWidths = fitColumnWidths(rows, availableWidth);
+  const border = (left: string, middle: string, right: string): string =>
+    `${left}${columnWidths.map((cellWidth) => "─".repeat(cellWidth + 2)).join(middle)}${right}`;
+  const makeRow = (row: string[]): string =>
+    `│ ${row.map((cell, index) => padCell(truncateToWidth(cell, columnWidths[index]!), columnWidths[index]!)).join(" │ ")} │`;
+
+  const tableLines = [
+    border("┌", "┬", "┐"),
+    makeRow(rows[0]!),
+    border("├", "┼", "┤"),
+    ...rows.slice(1).map(makeRow),
+    border("└", "┴", "┘"),
+  ];
+
+  return tableLines.map((line, index) => ({
+    key: `${keyPrefix}:${index}`,
+    prefix: index === 0 ? prefix : continuationPrefix,
+    ...(index === 0 ? { prefixColor: labelColor } : {}),
+    text: line,
+    color: textColor,
+    wrap: "truncate-end",
+  }));
 }
 
 export function flattenTranscript(messages: DisplayMessage[], width: number): TranscriptLine[] {
@@ -120,8 +277,8 @@ export function flattenTranscript(messages: DisplayMessage[], width: number): Tr
           `${message.messageId}:original`,
           "你",
           message.originalText,
-          "blueBright",
-          width,
+          THEME.userLabel,
+          THEME.userText,
         ),
       );
       lines.push({
@@ -133,32 +290,51 @@ export function flattenTranscript(messages: DisplayMessage[], width: number): Tr
 
     if (message.displayText) {
       const rendered = getAssistantLabel(message);
+      const renderedTable = message.kind === "table"
+        ? renderTableLines(
+            `${message.messageId}:display-table`,
+            rendered.label,
+            rendered.labelColor,
+            rendered.textColor,
+            message.displayText,
+            width,
+          )
+        : null;
       lines.push(
-        ...renderLabeledLines(
+        ...(renderedTable ?? renderLabeledLines(
           `${message.messageId}:display`,
           rendered.label,
           message.displayText,
-          rendered.color,
-          width,
-        ),
+          rendered.labelColor,
+          rendered.textColor,
+        )),
       );
     } else if (message.translationStatus === "scheduled") {
       lines.push({
         key: `${message.messageId}:status`,
-        text: "状态 [等待生成]",
-        color: "yellow",
+        prefix: "状态 ",
+        prefixColor: THEME.statusQueued,
+        text: "[等待生成]",
+        color: THEME.statusQueued,
+        wrap: "wrap",
       });
     } else if (message.translationStatus === "translating") {
       lines.push({
         key: `${message.messageId}:status`,
-        text: "状态 [生成中]",
-        color: "yellow",
+        prefix: "状态 ",
+        prefixColor: THEME.statusQueued,
+        text: "[生成中]",
+        color: THEME.statusQueued,
+        wrap: "wrap",
       });
     } else if (message.translationStatus === "failed") {
       lines.push({
         key: `${message.messageId}:status`,
-        text: `状态 [失败: ${getShortTranslationError(message)}]`,
-        color: "red",
+        prefix: "状态 ",
+        prefixColor: THEME.statusFailed,
+        text: `[失败: ${getShortTranslationError(message)}]`,
+        color: THEME.statusFailed,
+        wrap: "wrap",
       });
     }
 
@@ -169,6 +345,13 @@ export function flattenTranscript(messages: DisplayMessage[], width: number): Tr
   }
 
   return lines;
+}
+
+export function getDescriptorWatchKey(descriptor: SessionDescriptor | null): string | null {
+  if (!descriptor) {
+    return null;
+  }
+  return `${descriptor.provider}:${descriptor.sessionId}:${descriptor.filePath}`;
 }
 
 function SessionListView(props: { sessions: SessionDescriptor[]; selectedIndex: number }): React.JSX.Element {
@@ -185,20 +368,17 @@ function SessionListView(props: { sessions: SessionDescriptor[]; selectedIndex: 
     <Box flexDirection="column">
       {props.sessions.map((session, index) => {
         const selected = index === props.selectedIndex;
-        const marker = selected ? "›" : " ";
         const live = session.live ? "进行中" : "空闲";
+        const line = `${selected ? "›" : " "} [${session.provider}] ${session.title} (${session.sessionId.slice(-8)}) · ${formatRelativeTime(session.lastActivityMs)} · ${live}`;
         return (
-          <Box key={session.filePath}>
-            <Text {...(selected ? { inverse: true } : {})}>{marker} </Text>
-            <Text color={getProviderColor(session.provider)} {...(selected ? { inverse: true } : {})}>
-              [{session.provider}]
-            </Text>
-            <Text {...(selected ? { inverse: true } : {})}> {session.title}</Text>
-            <Text dimColor {...(selected ? { inverse: true } : {})}>
-              {" "}
-              ({session.sessionId.slice(-8)}) · {formatRelativeTime(session.lastActivityMs)} · {live}
-            </Text>
-          </Box>
+          <Text
+            key={session.filePath}
+            color={getProviderColor(session.provider)}
+            wrap="truncate-end"
+            {...(selected ? { inverse: true } : {})}
+          >
+            {line}
+          </Text>
         );
       })}
     </Box>
@@ -227,8 +407,11 @@ function SessionDetailView(props: {
       </Text>
       <Box flexDirection="column" marginTop={1}>
         {transcriptLines.map((line) => (
-          <Text key={line.key} {...(line.color ? { color: line.color } : {})}>
-            {line.text || " "}
+          <Text key={line.key} wrap={line.wrap ?? "wrap"}>
+            {line.prefix ? (
+              <Text {...(line.prefixColor ? { color: line.prefixColor } : {})}>{line.prefix}</Text>
+            ) : null}
+            <Text {...(line.color ? { color: line.color } : {})}>{line.text || " "}</Text>
           </Text>
         ))}
       </Box>
@@ -258,6 +441,7 @@ export function App(props: AppProps): React.JSX.Element {
         provider: props.provider,
         latest: true,
         cwd: props.cwd,
+        afterMs: props.afterMs,
       });
     }
 
@@ -273,7 +457,8 @@ export function App(props: AppProps): React.JSX.Element {
     }
 
     return visibleSessions[selectedIndex] ?? null;
-  }, [props.cwd, props.latest, props.provider, selectedIndex, selectedSessionId, sessions, visibleSessions]);
+  }, [props.afterMs, props.cwd, props.latest, props.provider, selectedIndex, selectedSessionId, sessions, visibleSessions]);
+  const selectedDescriptorWatchKey = getDescriptorWatchKey(selectedDescriptor);
 
   useEffect(() => {
     const index = new SessionIndex(props.provider);
@@ -297,7 +482,7 @@ export function App(props: AppProps): React.JSX.Element {
     } else if ((props.latest || props.sessionId) && !selectedDescriptor) {
       setView("waiting");
     }
-  }, [props.latest, props.sessionId, selectedDescriptor]);
+  }, [props.latest, props.sessionId, selectedDescriptorWatchKey]);
 
   useEffect(() => {
     if (selectedIndex >= visibleSessions.length) {
@@ -342,7 +527,7 @@ export function App(props: AppProps): React.JSX.Element {
       store.destroy();
       void stopWatching();
     };
-  }, [selectedDescriptor]);
+  }, [selectedDescriptorWatchKey]);
 
   useInput((input, key) => {
     if (key.ctrl && input === "c") {

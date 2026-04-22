@@ -8,14 +8,7 @@ import { getProviderRoot } from "./config.js";
 import { writeDebugLog } from "./debug-log.js";
 import { readClaudeDescriptor } from "./providers/claude.js";
 import { readCodexDescriptor } from "./providers/codex.js";
-import type { ProviderId, SessionDescriptor } from "./types.js";
-
-type SessionSelector = {
-  provider?: ProviderId | undefined;
-  latest?: boolean | undefined;
-  sessionId?: string | undefined;
-  cwd?: string | undefined;
-};
+import type { ProviderId, SessionDescriptor, SessionSelector } from "./types.js";
 
 function normalizeCwd(cwd: string): string {
   return path.resolve(cwd);
@@ -98,9 +91,12 @@ export function selectSessionDescriptor(
     ? sessions.filter((session) => session.provider === selector.provider)
     : sessions;
   const targetCwd = selector.cwd ? normalizeCwd(selector.cwd) : null;
-  const filtered = targetCwd
+  const filteredByCwd = targetCwd
     ? filteredByProvider.filter((session) => normalizeCwd(session.cwd) === targetCwd)
     : filteredByProvider;
+  const filtered = typeof selector.afterMs === "number"
+    ? filteredByCwd.filter((session) => session.lastActivityMs >= selector.afterMs!)
+    : filteredByCwd;
 
   if (selector.sessionId) {
     return filtered.find((session) => session.sessionId === selector.sessionId) ?? null;

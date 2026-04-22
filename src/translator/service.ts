@@ -28,6 +28,8 @@ export class TranscriptTranslationStore extends EventEmitter {
   private readonly cache: TranslationCache;
   private readonly timers = new Map<string, NodeJS.Timeout>();
   private readonly messageStates = new Map<string, MessageState>();
+  private readonly queue: Array<{ messageId: string; fingerprint: string }> = [];
+  private activeTranslationKey: string | null = null;
   private order: string[] = [];
 
   constructor(params: {
@@ -56,6 +58,7 @@ export class TranscriptTranslationStore extends EventEmitter {
       if (!nextIds.has(existingId)) {
         this.clearTimer(existingId);
         this.messageStates.delete(existingId);
+        this.removeQueuedTranslation(existingId);
       }
     }
 
@@ -118,13 +121,15 @@ export class TranscriptTranslationStore extends EventEmitter {
     }
     this.timers.clear();
     this.messageStates.clear();
+    this.queue.length = 0;
+    this.activeTranslationKey = null;
     this.order = [];
   }
 
   private scheduleTranslation(messageId: string, fingerprint: string): void {
     this.clearTimer(messageId);
     const timer = setTimeout(() => {
-      void this.runTranslation(messageId, fingerprint);
+      this.enqueueTranslation(messageId, fingerprint);
     }, this.config.debounceMs);
     this.timers.set(messageId, timer);
   }
@@ -134,6 +139,57 @@ export class TranscriptTranslationStore extends EventEmitter {
     if (timer) {
       clearTimeout(timer);
       this.timers.delete(messageId);
+    }
+  }
+
+  private enqueueTranslation(messageId: string, fingerprint: string): void {
+    const current = this.messageStates.get(messageId);
+    if (!current || current.fingerprint !== fingerprint) {
+      return;
+    }
+
+    const activeKey = `${messageId}:${fingerprint}`;
+    if (this.activeTranslationKey === activeKey) {
+      return;
+    }
+    if (this.queue.some((item) => item.messageId === messageId && item.fingerprint === fingerprint)) {
+      return;
+    }
+
+    this.queue.push({ messageId, fingerprint });
+    void this.processQueue();
+  }
+
+  private removeQueuedTranslation(messageId: string): void {
+    const nextQueue = this.queue.filter((item) => item.messageId !== messageId);
+    this.queue.length = 0;
+    this.queue.push(...nextQueue);
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.activeTranslationKey) {
+      return;
+    }
+
+    const next = this.queue.shift();
+    if (!next) {
+      return;
+    }
+
+    const current = this.messageStates.get(next.messageId);
+    if (!current || current.fingerprint !== next.fingerprint) {
+      void this.processQueue();
+      return;
+    }
+
+    this.activeTranslationKey = `${next.messageId}:${next.fingerprint}`;
+    try {
+      await this.runTranslation(next.messageId, next.fingerprint);
+    } finally {
+      if (this.activeTranslationKey === `${next.messageId}:${next.fingerprint}`) {
+        this.activeTranslationKey = null;
+      }
+      void this.processQueue();
     }
   }
 

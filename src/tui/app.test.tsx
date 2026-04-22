@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 
 import type { DisplayMessage } from "../types.js";
-import { flattenTranscript } from "./app.js";
+import type { SessionDescriptor } from "../types.js";
+import { flattenTranscript, getDescriptorWatchKey } from "./app.js";
 
 function createAssistantMessage(overrides: Partial<DisplayMessage>): DisplayMessage {
   return {
@@ -54,6 +55,29 @@ describe("flattenTranscript", () => {
     expect(lines.some((line) => line.text.includes("git diff"))).toBe(false);
   });
 
+  test("renders translated markdown tables as box tables instead of raw pipes", () => {
+    const lines = flattenTranscript(
+      [
+        createAssistantMessage({
+          kind: "table",
+          displayMode: "translate",
+          displayText: [
+            "| 功能 | 含义 |",
+            "| --- | --- |",
+            "| 实时输入 | 即时翻译 |",
+            "| 提供方切换 | 切换模型 |",
+          ].join("\n"),
+          translationStatus: "translated",
+        }),
+      ],
+      80,
+    );
+
+    expect(lines.some((line) => line.text.includes("┌"))).toBe(true);
+    expect(lines.some((line) => line.text.includes("│ 功能"))).toBe(true);
+    expect(lines.some((line) => line.text.includes("| --- |"))).toBe(false);
+  });
+
   test("shortens translation failures for display", () => {
     const lines = flattenTranscript(
       [
@@ -67,5 +91,30 @@ describe("flattenTranscript", () => {
 
     expect(lines.some((line) => line.text.includes("状态 [失败:"))).toBe(true);
     expect(lines.some((line) => line.text.includes("upstream timeout"))).toBe(true);
+  });
+});
+
+describe("getDescriptorWatchKey", () => {
+  test("stays stable when mutable descriptor fields change", () => {
+    const base: SessionDescriptor = {
+      provider: "codex",
+      sessionId: "session-1",
+      filePath: "/tmp/session.jsonl",
+      cwd: "/tmp/project",
+      title: "old title",
+      lastActivityAt: "2026-04-22T00:00:00.000Z",
+      lastActivityMs: 1,
+      live: false,
+    };
+
+    const next: SessionDescriptor = {
+      ...base,
+      title: "new title",
+      lastActivityAt: "2026-04-22T00:01:00.000Z",
+      lastActivityMs: 2,
+      live: true,
+    };
+
+    expect(getDescriptorWatchKey(base)).toBe(getDescriptorWatchKey(next));
   });
 });

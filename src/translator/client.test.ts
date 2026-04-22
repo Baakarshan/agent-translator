@@ -7,6 +7,7 @@ describe("TranslatorClient", () => {
   test("uses translation prompts for prose and summary prompts for technical blocks", () => {
     expect(getGenerationSystemPrompt("prose", "translate")).toContain("Translate the assistant message");
     expect(getGenerationSystemPrompt("command", "summarize")).toContain("Write a concise Simplified Chinese summary");
+    expect(getGenerationSystemPrompt("command", "summarize")).toContain("Do not copy literal shell commands");
   });
 
   test("sends a responses request and extracts translated text", async () => {

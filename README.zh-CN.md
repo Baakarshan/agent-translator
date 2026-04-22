@@ -1,4 +1,4 @@
-# Agent Translator TUI v1
+# Agent Translator TUI v1.1
 
 English README: [README.md](./README.md)
 
@@ -7,7 +7,9 @@ English README: [README.md](./README.md)
 它保留原生 agent 在原终端里运行，同时在单独的 TUI 窗口中显示中文结果：
 
 - 普通自然语言回复会翻译成简体中文
+- Markdown 表格在可行时会渲染成终端里的 box table
 - 代码块、命令、工具调用、diff、shell 风格输出会改写成简洁中文摘要
+- 长会话采用串行翻译队列，尽量减少瞬时大量请求导致的 `429`
 
 ## 依赖
 
@@ -71,6 +73,7 @@ agent-translator tui --latest --provider claude
 
 ```bash
 agent-translator tui --provider codex --session <id>
+agent-translator tui --provider claude --session <id>
 ```
 
 ## TUI 按键
@@ -89,11 +92,19 @@ agent-translator tui --provider codex --session <id>
 - `摘要`：代码、命令、工具调用、diff、shell 风格输出的中文摘要
 - `状态`：等待生成、生成中、失败等状态提示
 
+## 渲染说明
+
+- 当前配色改成更接近 Claude Code 的低噪音暖色系，而不是高饱和强调色。
+- 简单 Markdown 表格会被转成终端 box table，阅读时更接近真正的表格，而不是原始 `|` 管道文本。
+- 正文依然是终端文本渲染，不是完整富文本 Markdown 编辑器；标题、列表、长段落仍然遵循终端自身换行行为。
+
 ## 会话匹配
 
 包装命令会把当前工作目录传给 TUI，所以 `agent-translator codex --tui` 和 `agent-translator claude --tui` 会优先附着到当前项目目录下的最新会话，而不是跳到别的项目。
 
 macOS 下默认会优先尝试用 `/Applications/Ghostty.app` 打开 TUI；如果 Ghostty 无法启动，则自动回退到 Terminal.app。
+
+如果你在 Codex 桌面端里和 agent 对话，也可以直接用对应 session id 附着到这条会话；桌面端和 CLI 读取的是同一套 `~/.codex/sessions/` 会话文件。
 
 ## 自检
 

@@ -16,6 +16,18 @@ function isSyntheticUserEntry(entry: Record<string, unknown>): boolean {
   return entry.isSynthetic === true || entry.isMeta === true || entry.isSidechain === true;
 }
 
+function isClaudeControlText(text: string): boolean {
+  const trimmed = text.trim();
+  return (
+    trimmed.startsWith("<command-name>") ||
+    trimmed.startsWith("<command-message>") ||
+    trimmed.startsWith("<command-args>") ||
+    trimmed.startsWith("<local-command-stdout>") ||
+    trimmed.startsWith("<local-command-stderr>") ||
+    trimmed.startsWith("<local-command-caveat>")
+  );
+}
+
 function extractVisibleAssistantText(message: unknown): string | null {
   if (!message || typeof message !== "object") {
     return null;
@@ -65,7 +77,7 @@ export async function parseClaudeSessionFile(filePath: string): Promise<SessionS
         continue;
       }
       const text = extractVisibleAssistantText(entry.message);
-      if (text) {
+      if (text && !isClaudeControlText(text)) {
         messages.push({
           role: "user",
           text,

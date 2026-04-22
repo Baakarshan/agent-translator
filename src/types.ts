@@ -57,6 +57,14 @@ export interface SessionSnapshot extends SessionDescriptor {
   messages: ParsedMessage[];
 }
 
+export interface SessionSelector {
+  provider?: ProviderId | undefined;
+  latest?: boolean | undefined;
+  sessionId?: string | undefined;
+  cwd?: string | undefined;
+  afterMs?: number | undefined;
+}
+
 export interface TranslatorConfig {
   apiKey: string | null;
   baseUrl: string;

@@ -1,4 +1,4 @@
-# Agent Translator TUI v1
+# Agent Translator TUI v1.1
 
 Chinese README: [README.zh-CN.md](./README.zh-CN.md)
 
@@ -7,7 +7,9 @@ Read-only Chinese reading TUI for Codex and Claude Code.
 It keeps the native agent running in its original terminal and shows Chinese-only assistant output in a separate TUI window:
 
 - prose replies are translated into Simplified Chinese
+- markdown tables are rendered as terminal box tables when possible
 - code blocks, commands, tool calls, diffs, and shell-like output are converted into concise Chinese summaries
+- long live transcripts are translated through a serialized queue to reduce bursty `429` failures
 
 ## Requirements
 
@@ -71,6 +73,7 @@ Attach to a specific session id:
 
 ```bash
 agent-translator tui --provider codex --session <id>
+agent-translator tui --provider claude --session <id>
 ```
 
 ## TUI keys
@@ -89,11 +92,19 @@ Transcript scrolling uses the terminal's native scroll behavior, including touch
 - `摘要`: Chinese summary for code, commands, tool calls, diffs, and shell-like output
 - `状态`: queued, generating, or failed assistant row state
 
+## Rendering notes
+
+- The TUI uses a warm low-noise palette closer to Claude Code than the previous saturated colors.
+- Markdown tables are converted into box-drawing tables in the terminal when the structure is simple enough.
+- Transcript content is rendered as plain terminal text, not a full markdown editor. Headings, lists, and prose still rely on terminal wrapping behavior.
+
 ## Session matching
 
 Wrapper commands pass the current working directory into the TUI, so `agent-translator codex --tui` and `agent-translator claude --tui` attach to the latest matching session in the current project instead of jumping to another project.
 
 On macOS, the launcher now tries Ghostty first via `/Applications/Ghostty.app`. If Ghostty can't be launched, it falls back to Terminal.app.
+
+You can also attach the TUI to the active Codex desktop conversation by passing its session id directly. The same session files under `~/.codex/sessions/` are used by both the desktop app and the CLI.
 
 ## Verify
 

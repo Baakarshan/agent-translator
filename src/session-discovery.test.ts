@@ -88,5 +88,9 @@ describe("session discovery", () => {
     expect(
       selectSessionDescriptor(sessions, { provider: "claude", latest: true, cwd: "/tmp/project" })?.sessionId,
     ).toBe("claude-2");
+    expect(selectSessionDescriptor(sessions, { provider: "claude", latest: true, afterMs: 3 })?.sessionId).toBe(
+      "claude-2",
+    );
+    expect(selectSessionDescriptor(sessions, { provider: "claude", latest: true, afterMs: 4 })).toBeNull();
   });
 });

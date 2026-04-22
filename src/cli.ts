@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import React from "react";
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { render } from "ink";
 
 import { openTuiTerminal, runProviderBinary } from "./launcher.js";
@@ -35,9 +35,18 @@ export function parseWrappedProviderArgv(argv: string[]): { openTui: boolean; ar
   return { openTui, args };
 }
 
+export function prepareTuiScreen(stream: Pick<NodeJS.WriteStream, "isTTY" | "write"> = process.stdout): void {
+  if (!stream.isTTY) {
+    return;
+  }
+
+  // Clear the visible screen and scrollback so the TUI opens without shell noise above it.
+  stream.write("\x1b[2J\x1b[3J\x1b[H");
+}
+
 async function runWrappedProvider(provider: ProviderId, args: string[], openTui: boolean): Promise<void> {
   if (openTui) {
-    await openTuiTerminal(provider, process.cwd());
+    await openTuiTerminal(provider, process.cwd(), Date.now());
   }
 
   const exitCode = await runProviderBinary(provider, args);
@@ -49,12 +58,15 @@ async function renderTui(options: {
   latest?: boolean | undefined;
   session?: string | undefined;
   cwd?: string | undefined;
+  afterMs?: number | undefined;
 }): Promise<void> {
+  prepareTuiScreen();
   const props = {
     ...(options.provider ? { provider: options.provider } : {}),
     ...(options.latest ? { latest: options.latest } : {}),
     ...(options.session ? { sessionId: options.session } : {}),
     ...(options.cwd ? { cwd: options.cwd } : {}),
+    ...(typeof options.afterMs === "number" ? { afterMs: options.afterMs } : {}),
   };
   const instance = render(
     React.createElement(App, props),
@@ -85,7 +97,18 @@ async function main(): Promise<void> {
     .option("--provider <provider>", "Provider filter", (value: string) => value as ProviderId)
     .option("--session <id>", "Attach to a specific session id")
     .option("--cwd <path>", "Limit session matching to a working directory")
-    .action(async (options: { latest?: boolean; provider?: ProviderId; session?: string; cwd?: string }) => {
+    .addOption(
+      new Option("--after-ms <timestamp>", "Internal minimum session activity timestamp")
+        .argParser((value: string) => Number.parseInt(value, 10))
+        .hideHelp(),
+    )
+    .action(async (options: {
+      latest?: boolean;
+      provider?: ProviderId;
+      session?: string;
+      cwd?: string;
+      afterMs?: number;
+    }) => {
       await renderTui(options);
     });
 
