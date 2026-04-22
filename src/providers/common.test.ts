@@ -116,8 +116,31 @@ describe("splitAssistantMessage", () => {
     ]);
 
     expect(messages.map((message) => [message.kind, message.originalText])).toEqual([
-      ["command", "npm run test\nnpm run build"],
+      ["command", "npm run test\u0001npm run build"],
       ["tool", "apply_patch\nwrite_stdin"],
+    ]);
+  });
+
+  test("keeps a multiline command as one command entry when merging", () => {
+    const messages = finalizeMessages("codex", "session-1", [
+      {
+        role: "assistant",
+        text: "node --input-type=module <<'EOF'\nconsole.log('hi')\nEOF",
+        kind: "command",
+        displayMode: "summarize",
+        timestamp: "2026-04-22T00:00:00.000Z",
+      },
+      {
+        role: "assistant",
+        text: "git status",
+        kind: "command",
+        displayMode: "summarize",
+        timestamp: "2026-04-22T00:00:01.000Z",
+      },
+    ]);
+
+    expect(messages.map((message) => [message.kind, message.originalText])).toEqual([
+      ["command", "node --input-type=module <<'EOF'\nconsole.log('hi')\nEOF\u0001git status"],
     ]);
   });
 });

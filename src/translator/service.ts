@@ -46,6 +46,14 @@ function shortenPath(value: string, tailSegments = 3): string {
   return `.../${parts.slice(-tailSegments).join("/")}`;
 }
 
+function shortenKeyword(value: string, maxLength = 24): string {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
 function shortenFilePath(value: string): string {
   const normalized = value.trim().replace(/\/+/g, "/");
   if (!normalized.startsWith("/")) {
@@ -68,6 +76,32 @@ function shortenFilePath(value: string): string {
   return `.../${parts.slice(-2).join("/")}`;
 }
 
+function formatLocation(value: string | null, workdir: string | null, kind: "file" | "path"): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim().replace(/\/+/g, "/");
+  if (!normalized) {
+    return null;
+  }
+
+  if (workdir && normalized.startsWith(`${workdir}/`)) {
+    return normalized.slice(workdir.length + 1);
+  }
+
+  if (!normalized.startsWith("/")) {
+    return normalized;
+  }
+
+  return kind === "file" ? shortenFilePath(normalized) : shortenPath(normalized, 2);
+}
+
+function withScope(label: string, workdir: string | null): string {
+  const scope = formatLocation(workdir, null, "path");
+  return scope ? `${label} · ${scope}` : label;
+}
+
 function parseCommandEntry(entry: string): { workdir: string | null; command: string } {
   const separatorIndex = entry.indexOf("\u0000");
   if (separatorIndex === -1) {
@@ -83,62 +117,93 @@ function parseCommandEntry(entry: string): { workdir: string | null; command: st
 function summarizeCommandLine(entry: string): string {
   const { workdir, command } = parseCommandEntry(entry);
   const normalized = command.toLowerCase();
-  const workdirPrefix = workdir ? `在 ${shortenPath(workdir, 2)} ` : "";
 
   if (normalized.includes("agent-translator tui")) {
-    return `${workdirPrefix}打开翻译 TUI。`;
+    return withScope("打开 TUI", workdir);
   }
   if (normalized.startsWith("npm ") || normalized.includes(" npm ")) {
     if (normalized.includes("run verify")) {
-      return `${workdirPrefix}运行项目校验流程。`;
+      return withScope("校验", workdir);
     }
     if (normalized.includes("run test")) {
-      return `${workdirPrefix}运行测试。`;
+      return withScope("测试", workdir);
     }
     if (normalized.includes("run build")) {
-      return `${workdirPrefix}执行构建。`;
+      return withScope("构建", workdir);
     }
-    return `${workdirPrefix}运行项目脚本。`;
+    return withScope("脚本", workdir);
   }
   if (normalized.startsWith("git ") || normalized.includes(" git ")) {
     if (normalized.includes("status")) {
-      return `${workdirPrefix}查看工作区状态。`;
+      return withScope("Git 状态", workdir);
     }
     if (normalized.includes("diff")) {
-      return `${workdirPrefix}查看改动差异。`;
+      return withScope("Git 差异", workdir);
     }
     if (normalized.includes("add ")) {
-      return `${workdirPrefix}暂存改动。`;
+      return withScope("Git 暂存", workdir);
     }
     if (normalized.includes("commit")) {
-      return `${workdirPrefix}提交本地改动。`;
+      return withScope("Git 提交", workdir);
     }
-    return `${workdirPrefix}执行 Git 操作。`;
+    return withScope("Git", workdir);
   }
   if (normalized.startsWith("rg ") || normalized.includes(" rg ")) {
-    return `${workdirPrefix}搜索文本内容。`;
+    const match = command.match(/(?:^|\s)rg(?:\s+-\S+|\s+--\S+(?:=\S+)*)*\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))(?:\s+(.+))?$/);
+    const keyword = shortenKeyword(match?.[1] ?? match?.[2] ?? match?.[3] ?? "");
+    const target = formatLocation(match?.[4]?.trim() ?? null, workdir, "path");
+    const parts = ["搜索"];
+    if (keyword) {
+      parts.push(keyword);
+    }
+    if (target) {
+      parts.push(target);
+    } else if (workdir) {
+      parts.push(formatLocation(workdir, null, "path")!);
+    }
+    return parts.join(" · ");
   }
   if (normalized.startsWith("sed ") || normalized.includes(" sed ")) {
     const match = command.match(/sed\s+-n\s+'[^']*'\s+(.+)$/);
-    const target = match?.[1]?.trim();
-    return target
-      ? `${workdirPrefix}查看 ${shortenFilePath(target)} 的文件片段。`
-      : `${workdirPrefix}查看文件片段。`;
+    const target = formatLocation(match?.[1]?.trim() ?? null, workdir, "file");
+    return target ? `查看 · ${target}` : withScope("查看片段", workdir);
   }
   if (normalized.startsWith("node ") || normalized.includes("node --input-type=module")) {
-    return `${workdirPrefix}运行临时 Node 脚本。`;
+    return withScope("Node 脚本", workdir);
   }
   if (normalized.startsWith("osascript ") || normalized.includes("tell application \"terminal\"")) {
-    return "控制或读取 Terminal 窗口。";
+    return "Terminal 窗口";
   }
   if (normalized.startsWith("sleep ")) {
-    return "短暂等待结果返回。";
+    const seconds = command.match(/sleep\s+([0-9.]+)/)?.[1];
+    return seconds ? `等待 · ${seconds}s` : "等待";
   }
-  if (normalized.startsWith("cat ") || normalized.startsWith("find ") || normalized.startsWith("ls ")) {
-    return `${workdirPrefix}查看本地文件信息。`;
+  if (normalized.startsWith("cat ")) {
+    const target = formatLocation(command.replace(/^cat\s+/, "").trim(), workdir, "file");
+    return target ? `查看 · ${target}` : withScope("查看", workdir);
+  }
+  if (normalized.startsWith("ls ")) {
+    const target = formatLocation(command.match(/^ls(?:\s+-\S+|\s+--\S+(?:=\S+)*)*\s+(.+)$/)?.[1] ?? null, workdir, "path");
+    return target ? `列目录 · ${target}` : withScope("列目录", workdir);
+  }
+  if (normalized.startsWith("find ")) {
+    const base = command.match(/^find\s+([^\s]+)(?:\s+|$)/)?.[1] ?? null;
+    const keyword = command.match(/-name\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))/)?.[1]
+      ?? command.match(/-name\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))/)?.[2]
+      ?? command.match(/-name\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))/)?.[3]
+      ?? "";
+    const target = formatLocation(base, workdir, "path");
+    const parts = ["查找"];
+    if (keyword) {
+      parts.push(shortenKeyword(keyword));
+    }
+    if (target) {
+      parts.push(target);
+    }
+    return parts.join(" · ");
   }
 
-  return `${workdirPrefix}执行了一条命令。`;
+  return withScope(`命令 · ${shortenKeyword(command, 18)}`, workdir);
 }
 
 function summarizeToolLine(entry: string): string {
@@ -170,7 +235,7 @@ function buildLocalDisplayText(message: ParsedMessage): string | null {
   }
 
   if (message.kind === "command") {
-    return uniqLines(message.originalText.split("\n").map(summarizeCommandLine)).join("\n");
+    return uniqLines(message.originalText.split("\u0001").map(summarizeCommandLine)).join("\n");
   }
 
   if (message.kind === "code") {

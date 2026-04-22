@@ -318,8 +318,10 @@ function mergeAdjacentAssistantActivity(messages: RawParsedMessage[]): RawParsed
       && (previousKind === "command" || previousKind === "tool");
 
     if (canMerge) {
-      const parts = new Set([...previous.text.split("\n"), ...message.text.split("\n")].map((part) => part.trim()).filter(Boolean));
-      previous.text = [...parts].join("\n");
+      const separator = previousKind === "command" ? "\u0001" : "\n";
+      const splitParts = (value: string) => value.split(separator).map((part) => part.trim()).filter(Boolean);
+      const parts = new Set([...splitParts(previous.text), ...splitParts(message.text)]);
+      previous.text = [...parts].join(separator);
       previous.timestamp = message.timestamp;
       continue;
     }

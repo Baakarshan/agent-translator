@@ -211,7 +211,7 @@ describe("TranscriptTranslationStore", () => {
     ]);
 
     const immediate = store.getMessages()[0];
-    expect(immediate?.displayText).toBe("打开翻译 TUI。");
+    expect(immediate?.displayText).toBe("打开 TUI");
     expect(immediate?.translationStatus).toBe("cached");
     expect(generate).not.toHaveBeenCalled();
     store.destroy();
@@ -229,14 +229,14 @@ describe("TranscriptTranslationStore", () => {
 
     await store.setMessages([
       {
-        ...createMessage("msg-1", "npm run test\ngit status\nosascript -e 'tell application \"Terminal\" to do script \"echo hi\"'"),
+        ...createMessage("msg-1", "npm run test\u0001git status\u0001osascript -e 'tell application \"Terminal\" to do script \"echo hi\"'"),
         kind: "command",
         displayMode: "summarize",
       },
     ]);
 
     const message = store.getMessages()[0];
-    expect(message?.displayText).toBe("运行测试。\n查看工作区状态。\n控制或读取 Terminal 窗口。");
+    expect(message?.displayText).toBe("测试\nGit 状态\nTerminal 窗口");
     expect(message?.translationStatus).toBe("cached");
     expect(generate).not.toHaveBeenCalled();
     store.destroy();
@@ -272,12 +272,72 @@ describe("TranscriptTranslationStore", () => {
     ]);
 
     const messages = store.getMessages();
-    expect(messages[0]?.displayText).toBe("在 .../products/agent-translator 执行构建。");
+    expect(messages[0]?.displayText).toBe("构建 · .../products/agent-translator");
     expect(messages[1]?.displayText).toBe(
       "修改了 .../agent-translator/src/tui/app.tsx、.../agent-translator/README.md。",
     );
     expect(messages[0]?.translationStatus).toBe("cached");
     expect(messages[1]?.translationStatus).toBe("cached");
+    expect(generate).not.toHaveBeenCalled();
+    store.destroy();
+  });
+
+  test("keeps command summaries to one short line with keywords", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
+    const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    const generate = vi.fn();
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache,
+      translator: { generate } as any,
+    });
+
+    await store.setMessages([
+      {
+        ...createMessage(
+          "msg-1",
+          [
+            "/Users/baakarshan/Developer/products/agent-translator\u0000rg -n \"followTail\" src/tui/app.tsx",
+            "/Users/baakarshan/Developer/products/agent-translator\u0000sed -n '1,80p' src/tui/app.tsx",
+            "/Users/baakarshan/Developer/products/agent-translator\u0000find /Users/baakarshan/.codex/sessions -name 'rollout-*.jsonl'",
+          ].join("\u0001"),
+        ),
+        kind: "command",
+        displayMode: "summarize",
+      },
+    ]);
+
+    const message = store.getMessages()[0];
+    expect(message?.displayText).toBe(
+      "搜索 · followTail · src/tui/app.tsx\n查看 · src/tui/app.tsx\n查找 · rollout-*.jsonl · .../.codex/sessions",
+    );
+    expect(generate).not.toHaveBeenCalled();
+    store.destroy();
+  });
+
+  test("summarizes a multiline heredoc command as one line", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
+    const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    const generate = vi.fn();
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache,
+      translator: { generate } as any,
+    });
+
+    await store.setMessages([
+      {
+        ...createMessage(
+          "msg-1",
+          "/Users/baakarshan/Developer/products/agent-translator\u0000node --input-type=module <<'EOF'\nconsole.log('hi')\nEOF",
+        ),
+        kind: "command",
+        displayMode: "summarize",
+      },
+    ]);
+
+    const message = store.getMessages()[0];
+    expect(message?.displayText).toBe("Node 脚本 · .../products/agent-translator");
     expect(generate).not.toHaveBeenCalled();
     store.destroy();
   });
