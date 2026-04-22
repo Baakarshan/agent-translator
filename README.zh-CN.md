@@ -7,6 +7,7 @@ English README: [README.md](./README.md)
 它保留原生 agent 在原终端里运行，同时在单独的 TUI 窗口中显示中文结果：
 
 - 普通自然语言回复会翻译成简体中文
+- 如果 assistant 本身输出的已经是中文，则直接原样显示，不再重复发给模型翻译
 - Markdown 表格在可行时会渲染成终端里的 box table
 - 代码块、命令、工具调用、diff、shell 风格输出会改写成简洁中文摘要
 - 长会话采用串行翻译队列，尽量减少瞬时大量请求导致的 `429`
@@ -97,6 +98,7 @@ agent-translator tui --provider claude --session <id>
 - 当前配色改成更接近 Claude Code 的低噪音暖色系，而不是高饱和强调色。
 - 简单 Markdown 表格会被转成终端 box table，阅读时更接近真正的表格，而不是原始 `|` 管道文本。
 - 正文依然是终端文本渲染，不是完整富文本 Markdown 编辑器；标题、列表、长段落仍然遵循终端自身换行行为。
+- Codex 协议层的 `function_call` 内部记录不会再进入主 transcript，避免当前这种重度编码会话被工具调用刷屏。
 
 ## 会话匹配
 

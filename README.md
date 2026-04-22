@@ -7,6 +7,7 @@ Read-only Chinese reading TUI for Codex and Claude Code.
 It keeps the native agent running in its original terminal and shows Chinese-only assistant output in a separate TUI window:
 
 - prose replies are translated into Simplified Chinese
+- assistant replies that are already in Chinese are shown directly without re-sending them to the model
 - markdown tables are rendered as terminal box tables when possible
 - code blocks, commands, tool calls, diffs, and shell-like output are converted into concise Chinese summaries
 - long live transcripts are translated through a serialized queue to reduce bursty `429` failures
@@ -97,6 +98,7 @@ Transcript scrolling uses the terminal's native scroll behavior, including touch
 - The TUI uses a warm low-noise palette closer to Claude Code than the previous saturated colors.
 - Markdown tables are converted into box-drawing tables in the terminal when the structure is simple enough.
 - Transcript content is rendered as plain terminal text, not a full markdown editor. Headings, lists, and prose still rely on terminal wrapping behavior.
+- Codex protocol-level `function_call` records are hidden from the main transcript so live coding sessions are not flooded by internal tool traffic.
 
 ## Session matching
 

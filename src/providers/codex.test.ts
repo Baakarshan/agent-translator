@@ -18,7 +18,6 @@ describe("parseCodexSessionFile", () => {
     expect(snapshot?.messages.map((message) => [message.role, message.kind, message.originalText])).toEqual([
       ["user", "prose", "Please help me review this change"],
       ["assistant", "prose", "I will inspect the diff first."],
-      ["assistant", "tool", 'exec_command {"cmd":"git diff"}'],
     ]);
   });
 
@@ -31,7 +30,7 @@ describe("parseCodexSessionFile", () => {
 
     await writeFile(filePath, `${completePrefix}\n${partialLine}`, "utf8");
     const incomplete = await parseCodexSessionFile(filePath);
-    expect(incomplete?.messages.at(-1)?.originalText).toBe('exec_command {"cmd":"git diff"}');
+    expect(incomplete?.messages.at(-1)?.originalText).toBe("I will inspect the diff first.");
 
     await writeFile(
       filePath,

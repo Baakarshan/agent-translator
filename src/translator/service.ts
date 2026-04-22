@@ -22,6 +22,12 @@ function toDisplayMessage(message: ParsedMessage): DisplayMessage {
   };
 }
 
+function isLikelyChineseText(text: string): boolean {
+  const cjkMatches = text.match(/[\u3400-\u9fff]/g) ?? [];
+  const latinMatches = text.match(/[A-Za-z]/g) ?? [];
+  return cjkMatches.length >= 6 && cjkMatches.length >= latinMatches.length;
+}
+
 export class TranscriptTranslationStore extends EventEmitter {
   private readonly config: TranslatorConfig;
   private readonly translator: TranslatorClient;
@@ -74,6 +80,21 @@ export class TranscriptTranslationStore extends EventEmitter {
           ...toDisplayMessage(message),
           displayText: message.originalText,
           translationStatus: "idle",
+          fingerprint,
+        });
+        continue;
+      }
+
+      if (
+        message.displayMode === "translate" &&
+        (message.kind === "prose" || message.kind === "table") &&
+        isLikelyChineseText(message.originalText)
+      ) {
+        this.clearTimer(message.messageId);
+        this.messageStates.set(message.messageId, {
+          ...toDisplayMessage(message),
+          displayText: message.originalText,
+          translationStatus: "cached",
           fingerprint,
         });
         continue;

@@ -88,18 +88,6 @@ function parseResponseItem(entry: Record<string, unknown>, fallbackTimestamp: st
     };
   }
 
-  if (payload.type === "function_call" && typeof payload.name === "string") {
-    const argumentsText = typeof payload.arguments === "string" ? payload.arguments.trim() : "";
-    const text = argumentsText ? `${payload.name} ${argumentsText}` : payload.name;
-    return {
-      role: "assistant",
-      text,
-      kind: "tool",
-      displayMode: displayModeForKind("tool"),
-      timestamp: readTimestamp(entry, fallbackTimestamp),
-    };
-  }
-
   return null;
 }
 

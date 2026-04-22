@@ -172,4 +172,23 @@ describe("TranscriptTranslationStore", () => {
     ]);
     store.destroy();
   });
+
+  test("shows Chinese assistant prose immediately without calling the translator", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
+    const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    const generate = vi.fn();
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache,
+      translator: { generate } as any,
+    });
+
+    await store.setMessages([createMessage("msg-1", "我先检查一下当前会话里到底有哪些消息类型。")]);
+
+    const message = store.getMessages()[0];
+    expect(message?.displayText).toBe("我先检查一下当前会话里到底有哪些消息类型。");
+    expect(message?.translationStatus).toBe("cached");
+    expect(generate).not.toHaveBeenCalled();
+    store.destroy();
+  });
 });
