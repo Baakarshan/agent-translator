@@ -195,10 +195,7 @@ describe("TranscriptTranslationStore", () => {
   test("shows a local placeholder summary immediately for technical blocks", async () => {
     const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
     const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
-    let resolveTranslation: ((value: string) => void) | null = null;
-    const generate = vi.fn().mockImplementation(() => new Promise<string>((resolve) => {
-      resolveTranslation = resolve;
-    }));
+    const generate = vi.fn();
     const store = new TranscriptTranslationStore({
       config: baseConfig,
       cache,
@@ -215,24 +212,19 @@ describe("TranscriptTranslationStore", () => {
 
     const immediate = store.getMessages()[0];
     expect(immediate?.displayText).toBe("打开翻译 TUI。");
-    expect(immediate?.translationStatus).toBe("scheduled");
-
-    await waitForCondition(() => generate.mock.calls.length === 1);
-    resolveTranslation?.("该命令会打开最新的 Codex 翻译 TUI。");
-    await waitForCondition(() => store.getMessages()[0]?.translationStatus === "translated");
-
-    const final = store.getMessages()[0];
-    expect(final?.displayText).toBe("该命令会打开最新的 Codex 翻译 TUI。");
+    expect(immediate?.translationStatus).toBe("cached");
+    expect(generate).not.toHaveBeenCalled();
     store.destroy();
   });
 
   test("summarizes merged command activity into short Chinese lines", async () => {
     const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
     const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    const generate = vi.fn().mockResolvedValue("unused");
     const store = new TranscriptTranslationStore({
       config: baseConfig,
       cache,
-      translator: { generate: vi.fn().mockResolvedValue("unused") } as any,
+      translator: { generate } as any,
     });
 
     await store.setMessages([
@@ -245,6 +237,48 @@ describe("TranscriptTranslationStore", () => {
 
     const message = store.getMessages()[0];
     expect(message?.displayText).toBe("运行测试。\n查看工作区状态。\n控制或读取 Terminal 窗口。");
+    expect(message?.translationStatus).toBe("cached");
+    expect(generate).not.toHaveBeenCalled();
+    store.destroy();
+  });
+
+  test("adds workdir and edited file details to local command and tool summaries", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
+    const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    const generate = vi.fn();
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache,
+      translator: { generate } as any,
+    });
+
+    await store.setMessages([
+      {
+        ...createMessage(
+          "msg-1",
+          "/Users/baakarshan/Developer/products/agent-translator\u0000npm run build",
+        ),
+        kind: "command",
+        displayMode: "summarize",
+      },
+      {
+        ...createMessage(
+          "msg-2",
+          "apply_patch\u0000/Users/baakarshan/Developer/products/agent-translator/src/tui/app.tsx\u0001/Users/baakarshan/Developer/products/agent-translator/README.md",
+        ),
+        kind: "tool",
+        displayMode: "summarize",
+      },
+    ]);
+
+    const messages = store.getMessages();
+    expect(messages[0]?.displayText).toBe("在 .../products/agent-translator 执行构建。");
+    expect(messages[1]?.displayText).toBe(
+      "修改了 .../agent-translator/src/tui/app.tsx、.../agent-translator/README.md。",
+    );
+    expect(messages[0]?.translationStatus).toBe("cached");
+    expect(messages[1]?.translationStatus).toBe("cached");
+    expect(generate).not.toHaveBeenCalled();
     store.destroy();
   });
 });

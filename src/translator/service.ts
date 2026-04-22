@@ -32,47 +32,101 @@ function uniqLines(lines: string[]): string[] {
   return [...new Set(lines.map((line) => line.trim()).filter(Boolean))];
 }
 
-function summarizeCommandLine(command: string): string {
+function shortenPath(value: string, tailSegments = 3): string {
+  const normalized = value.trim().replace(/\/+/g, "/");
+  if (!normalized.startsWith("/")) {
+    return normalized;
+  }
+
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length <= tailSegments) {
+    return `/${parts.join("/")}`;
+  }
+
+  return `.../${parts.slice(-tailSegments).join("/")}`;
+}
+
+function shortenFilePath(value: string): string {
+  const normalized = value.trim().replace(/\/+/g, "/");
+  if (!normalized.startsWith("/")) {
+    return normalized;
+  }
+
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length <= 2) {
+    return `/${parts.join("/")}`;
+  }
+
+  const markerIndex = parts.findLastIndex((part) =>
+    ["src", "app", "lib", "packages", "docs", "test", "tests"].includes(part),
+  );
+
+  if (markerIndex > 0 && parts.length - markerIndex <= 3) {
+    return `.../${parts.slice(markerIndex - 1).join("/")}`;
+  }
+
+  return `.../${parts.slice(-2).join("/")}`;
+}
+
+function parseCommandEntry(entry: string): { workdir: string | null; command: string } {
+  const separatorIndex = entry.indexOf("\u0000");
+  if (separatorIndex === -1) {
+    return { workdir: null, command: entry.trim() };
+  }
+
+  return {
+    workdir: entry.slice(0, separatorIndex).trim() || null,
+    command: entry.slice(separatorIndex + 1).trim(),
+  };
+}
+
+function summarizeCommandLine(entry: string): string {
+  const { workdir, command } = parseCommandEntry(entry);
   const normalized = command.toLowerCase();
+  const workdirPrefix = workdir ? `在 ${shortenPath(workdir, 2)} ` : "";
 
   if (normalized.includes("agent-translator tui")) {
-    return "打开翻译 TUI。";
+    return `${workdirPrefix}打开翻译 TUI。`;
   }
   if (normalized.startsWith("npm ") || normalized.includes(" npm ")) {
     if (normalized.includes("run verify")) {
-      return "运行项目校验流程。";
+      return `${workdirPrefix}运行项目校验流程。`;
     }
     if (normalized.includes("run test")) {
-      return "运行测试。";
+      return `${workdirPrefix}运行测试。`;
     }
     if (normalized.includes("run build")) {
-      return "执行构建。";
+      return `${workdirPrefix}执行构建。`;
     }
-    return "运行项目脚本。";
+    return `${workdirPrefix}运行项目脚本。`;
   }
   if (normalized.startsWith("git ") || normalized.includes(" git ")) {
     if (normalized.includes("status")) {
-      return "查看工作区状态。";
+      return `${workdirPrefix}查看工作区状态。`;
     }
     if (normalized.includes("diff")) {
-      return "查看改动差异。";
+      return `${workdirPrefix}查看改动差异。`;
     }
     if (normalized.includes("add ")) {
-      return "暂存改动。";
+      return `${workdirPrefix}暂存改动。`;
     }
     if (normalized.includes("commit")) {
-      return "提交本地改动。";
+      return `${workdirPrefix}提交本地改动。`;
     }
-    return "执行 Git 操作。";
+    return `${workdirPrefix}执行 Git 操作。`;
   }
   if (normalized.startsWith("rg ") || normalized.includes(" rg ")) {
-    return "搜索文本内容。";
+    return `${workdirPrefix}搜索文本内容。`;
   }
   if (normalized.startsWith("sed ") || normalized.includes(" sed ")) {
-    return "查看文件片段。";
+    const match = command.match(/sed\s+-n\s+'[^']*'\s+(.+)$/);
+    const target = match?.[1]?.trim();
+    return target
+      ? `${workdirPrefix}查看 ${shortenFilePath(target)} 的文件片段。`
+      : `${workdirPrefix}查看文件片段。`;
   }
   if (normalized.startsWith("node ") || normalized.includes("node --input-type=module")) {
-    return "运行临时 Node 脚本。";
+    return `${workdirPrefix}运行临时 Node 脚本。`;
   }
   if (normalized.startsWith("osascript ") || normalized.includes("tell application \"terminal\"")) {
     return "控制或读取 Terminal 窗口。";
@@ -81,15 +135,24 @@ function summarizeCommandLine(command: string): string {
     return "短暂等待结果返回。";
   }
   if (normalized.startsWith("cat ") || normalized.startsWith("find ") || normalized.startsWith("ls ")) {
-    return "查看本地文件信息。";
+    return `${workdirPrefix}查看本地文件信息。`;
   }
 
-  return "执行了一条命令。";
+  return `${workdirPrefix}执行了一条命令。`;
 }
 
-function summarizeToolLine(toolName: string): string {
+function summarizeToolLine(entry: string): string {
+  const [rawToolName = "", detail = ""] = entry.split("\u0000", 2);
+  const toolName = rawToolName;
   const normalized = toolName.toLowerCase();
   if (normalized === "apply_patch") {
+    const files = uniqLines(detail.split("\u0001")).map(shortenFilePath);
+    if (files.length === 1) {
+      return `修改了 ${files[0]}。`;
+    }
+    if (files.length > 1) {
+      return `修改了 ${files.join("、")}。`;
+    }
     return "修改了项目文件。";
   }
   if (normalized === "write_stdin") {
@@ -199,6 +262,19 @@ export class TranscriptTranslationStore extends EventEmitter {
         this.messageStates.set(message.messageId, {
           ...toDisplayMessage(message),
           displayText: message.originalText,
+          translationStatus: "cached",
+          fingerprint,
+        });
+        continue;
+      }
+
+      if (message.displayMode === "summarize" && (message.kind === "command" || message.kind === "tool")) {
+        const localSummary = buildLocalDisplayText(message);
+        this.clearTimer(message.messageId);
+        this.messageStates.set(message.messageId, {
+          ...toDisplayMessage(message),
+          summaryText: localSummary,
+          displayText: localSummary,
           translationStatus: "cached",
           fingerprint,
         });

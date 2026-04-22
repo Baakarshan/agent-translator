@@ -41,4 +41,60 @@ describe("parseCodexSessionFile", () => {
     const complete = await parseCodexSessionFile(filePath);
     expect(complete?.messages.at(-1)?.originalText).toBe("Trailing assistant message");
   });
+
+  test("captures command workdirs and edited file targets for local summaries", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-codex-"));
+    const filePath = path.join(temporaryDir, "rollout-structured.jsonl");
+
+    await writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          timestamp: "2026-04-22T09:00:00.000Z",
+          type: "session_meta",
+          payload: {
+            id: "session-2",
+            cwd: "/Users/baakarshan/Developer/products/demo",
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-04-22T09:00:01.000Z",
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            name: "exec_command",
+            arguments: JSON.stringify({
+              cmd: "npm run test",
+              workdir: "/Users/baakarshan/Developer/products/demo",
+            }),
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-04-22T09:00:02.000Z",
+          type: "response_item",
+          payload: {
+            type: "custom_tool_call",
+            name: "apply_patch",
+            input: [
+              "*** Begin Patch",
+              "*** Update File: /Users/baakarshan/Developer/products/demo/src/app.ts",
+              "*** Update File: /Users/baakarshan/Developer/products/demo/README.md",
+              "*** End Patch",
+            ].join("\n"),
+          },
+        }),
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const snapshot = await parseCodexSessionFile(filePath);
+    expect(snapshot?.messages.map((message) => [message.kind, message.originalText])).toEqual([
+      ["command", "/Users/baakarshan/Developer/products/demo\u0000npm run test"],
+      [
+        "tool",
+        "apply_patch\u0000/Users/baakarshan/Developer/products/demo/src/app.ts\u0001/Users/baakarshan/Developer/products/demo/README.md",
+      ],
+    ]);
+  });
 });

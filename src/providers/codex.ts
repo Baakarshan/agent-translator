@@ -80,6 +80,22 @@ function parseToolArguments(argumentsText: string): Record<string, unknown> | nu
   }
 }
 
+function encodeCommandActivity(commandText: string, workdir: string | null): string {
+  return workdir ? `${workdir}\u0000${commandText}` : commandText;
+}
+
+function extractPatchFiles(input: unknown): string[] {
+  if (typeof input !== "string" || !input.trim()) {
+    return [];
+  }
+
+  const matches = input.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm);
+  const files = Array.from(matches, (match) => match[1]?.trim()).filter(
+    (file): file is string => Boolean(file),
+  );
+  return [...new Set(files)];
+}
+
 function parseResponseItem(entry: Record<string, unknown>, fallbackTimestamp: string): RawParsedMessage | null {
   const payload = (entry.payload ?? entry.item) as Record<string, unknown> | undefined;
   if (!payload || typeof payload !== "object") {
@@ -111,9 +127,10 @@ function parseResponseItem(entry: Record<string, unknown>, fallbackTimestamp: st
 
     if (payload.name === "exec_command") {
       const commandText = extractStringField(parsedArguments, "cmd") ?? "exec_command";
+      const workdir = extractStringField(parsedArguments, "workdir");
       return {
         role: "assistant",
-        text: commandText,
+        text: encodeCommandActivity(commandText, workdir),
         kind: "command",
         displayMode: displayModeForKind("command"),
         timestamp: readTimestamp(entry, fallbackTimestamp),
@@ -130,9 +147,10 @@ function parseResponseItem(entry: Record<string, unknown>, fallbackTimestamp: st
   }
 
   if (payload.type === "custom_tool_call" && typeof payload.name === "string") {
+    const patchFiles = payload.name === "apply_patch" ? extractPatchFiles(payload.input) : [];
     return {
       role: "assistant",
-      text: payload.name,
+      text: patchFiles.length > 0 ? `${payload.name}\u0000${patchFiles.join("\u0001")}` : payload.name,
       kind: "tool",
       displayMode: displayModeForKind("tool"),
       timestamp: readTimestamp(entry, fallbackTimestamp),
