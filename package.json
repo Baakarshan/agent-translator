@@ -9,6 +9,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
+    "install:global": "npm run build && npm link",
+    "start": "node dist/cli.js",
+    "verify": "npm run typecheck && npm run test && npm run build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },

@@ -7,6 +7,7 @@ export type TranslationStatus =
   | "scheduled"
   | "translating"
   | "translated"
+  | "cached"
   | "failed";
 
 export interface ParsedMessage {

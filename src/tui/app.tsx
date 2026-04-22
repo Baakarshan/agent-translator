@@ -22,6 +22,21 @@ type TranscriptLine = {
   color?: string;
 };
 
+function getTranslationPrefix(message: DisplayMessage): { label: string; color: string } {
+  if (message.translationStatus === "cached") {
+    return { label: "ZH =", color: "green" };
+  }
+  return { label: "ZH >", color: "green" };
+}
+
+function getShortTranslationError(message: DisplayMessage): string {
+  const error = message.translationError?.trim();
+  if (!error) {
+    return "request failed";
+  }
+  return error.length > 60 ? `${error.slice(0, 57)}...` : error;
+}
+
 function formatRelativeTime(lastActivityMs: number): string {
   const deltaMs = Math.max(0, Date.now() - lastActivityMs);
   const seconds = Math.floor(deltaMs / 1000);
@@ -103,25 +118,32 @@ export function flattenTranscript(messages: DisplayMessage[], width: number): Tr
 
     if (message.role === "assistant") {
       if (message.translatedText) {
+        const translated = getTranslationPrefix(message);
         lines.push(
           ...renderLabeledLines(
             `${message.messageId}:translated`,
-            "ZH >",
+            translated.label,
             message.translatedText,
-            "green",
+            translated.color,
             width,
           ),
         );
-      } else if (message.translationStatus === "scheduled" || message.translationStatus === "translating") {
+      } else if (message.translationStatus === "scheduled") {
         lines.push({
           key: `${message.messageId}:status`,
-          text: "ZH > [translating...]",
+          text: "ZH ~ [queued]",
+          color: "yellow",
+        });
+      } else if (message.translationStatus === "translating") {
+        lines.push({
+          key: `${message.messageId}:status`,
+          text: "ZH ~ [translating]",
           color: "yellow",
         });
       } else if (message.translationStatus === "failed") {
         lines.push({
           key: `${message.messageId}:status`,
-          text: `ZH > [translation failed: ${message.translationError ?? "unknown error"}]`,
+          text: `ZH ! [failed: ${getShortTranslationError(message)}]`,
           color: "red",
         });
       }
@@ -190,7 +212,7 @@ function SessionDetailView(props: {
       <Text dimColor>
         {props.descriptor.sessionId} · {props.descriptor.cwd}
       </Text>
-      <Text dimColor>q quit · b back · j/k or arrows scroll</Text>
+      <Text dimColor>ctrl+c/q quit · b back · j/k or arrows scroll</Text>
       <Text dimColor>
         {props.snapshot ? `${props.snapshot.messages.length} messages` : "Loading transcript..."}
       </Text>
@@ -331,6 +353,11 @@ export function App(props: AppProps): React.JSX.Element {
   }, [followTail, maxScrollOffset]);
 
   useInput((input, key) => {
+    if (key.ctrl && input === "c") {
+      exit();
+      return;
+    }
+
     if (input === "q") {
       exit();
       return;
@@ -389,7 +416,7 @@ export function App(props: AppProps): React.JSX.Element {
           {props.sessionId ? `session=${props.sessionId}` : "latest=true"}
         </Text>
         {props.cwd ? <Text dimColor>cwd={props.cwd}</Text> : null}
-        <Text dimColor>q quit · b back</Text>
+        <Text dimColor>ctrl+c/q quit · b back</Text>
       </Box>
     );
   }
@@ -409,7 +436,7 @@ export function App(props: AppProps): React.JSX.Element {
   return (
     <Box flexDirection="column">
       <Text>Agent Translator TUI</Text>
-      <Text dimColor>q quit · arrows/j/k move · Enter attach</Text>
+      <Text dimColor>ctrl+c/q quit · arrows/j/k move · Enter attach</Text>
       <Text dimColor>
         {props.provider ? `filter=${props.provider}` : "filter=all"}
         {props.cwd ? ` · cwd=${props.cwd}` : ""}

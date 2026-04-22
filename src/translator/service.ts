@@ -81,7 +81,7 @@ export class TranscriptTranslationStore extends EventEmitter {
         this.messageStates.set(message.messageId, {
           ...message,
           translatedText: cached,
-          translationStatus: "translated",
+          translationStatus: "cached",
           fingerprint,
         });
         continue;
@@ -167,4 +167,3 @@ export class TranscriptTranslationStore extends EventEmitter {
     this.emit("update", this.getMessages());
   }
 }
-

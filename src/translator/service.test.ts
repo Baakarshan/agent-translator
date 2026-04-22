@@ -63,6 +63,27 @@ describe("TranscriptTranslationStore", () => {
     store.destroy();
   });
 
+  test("marks reused text from the cache as cached for a new row", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
+    const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    const translate = vi.fn().mockResolvedValue("缓存命中");
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache,
+      translator: { translate } as any,
+    });
+
+    await store.setMessages([createMessage("msg-1", "Cache me")]);
+    await waitForCondition(() => store.getMessages()[0]?.translationStatus === "translated");
+
+    await store.setMessages([createMessage("msg-2", "Cache me")]);
+    const nextMessage = store.getMessages()[0];
+    expect(nextMessage?.translatedText).toBe("缓存命中");
+    expect(nextMessage?.translationStatus).toBe("cached");
+    expect(translate).toHaveBeenCalledTimes(1);
+    store.destroy();
+  });
+
   test("marks only the failing row as failed", async () => {
     const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
     const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
