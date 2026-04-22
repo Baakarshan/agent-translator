@@ -89,8 +89,8 @@ Transcript scrolling uses the terminal's native scroll behavior, including touch
 ## Output mode
 
 - `你`: user message, shown as original text
-- `译`: translated Chinese prose/table output
-- `摘要`: Chinese summary for code, commands, tool calls, diffs, and shell-like output
+- `翻译`: translated Chinese prose/table output
+- `命令` / `工具` / `代码` / `改动` / `输出` / `表格`: category-specific Chinese rendering
 - `状态`: queued, generating, or failed assistant row state
 
 ## Rendering notes
@@ -98,7 +98,8 @@ Transcript scrolling uses the terminal's native scroll behavior, including touch
 - The TUI uses a warm low-noise palette closer to Claude Code than the previous saturated colors.
 - Markdown tables are converted into box-drawing tables in the terminal when the structure is simple enough.
 - Transcript content is rendered as plain terminal text, not a full markdown editor. Headings, lists, and prose still rely on terminal wrapping behavior.
-- Codex protocol-level `function_call` records are hidden from the main transcript so live coding sessions are not flooded by internal tool traffic.
+- Codex `exec_command` and `apply_patch` activity are normalized back into human-readable `命令` / `工具` rows so live sessions still show what ran or what changed without dumping raw JSON payloads.
+- Command and tool rows are summarized locally and cached immediately, which reduces background redraws compared with the older model-queue path.
 
 ## Session matching
 
