@@ -303,6 +303,33 @@ function mergeAdjacentAssistantNarrative(messages: RawParsedMessage[]): RawParse
   return merged;
 }
 
+function mergeAdjacentAssistantActivity(messages: RawParsedMessage[]): RawParsedMessage[] {
+  const merged: RawParsedMessage[] = [];
+
+  for (const message of messages) {
+    const previous = merged[merged.length - 1];
+    const previousKind = previous?.kind;
+    const canMerge = previous
+      && previous.role === "assistant"
+      && message.role === "assistant"
+      && previous.displayMode === "summarize"
+      && message.displayMode === "summarize"
+      && previousKind === message.kind
+      && (previousKind === "command" || previousKind === "tool");
+
+    if (canMerge) {
+      const parts = new Set([...previous.text.split("\n"), ...message.text.split("\n")].map((part) => part.trim()).filter(Boolean));
+      previous.text = [...parts].join("\n");
+      previous.timestamp = message.timestamp;
+      continue;
+    }
+
+    merged.push({ ...message });
+  }
+
+  return merged;
+}
+
 export function finalizeMessages(
   provider: ProviderId,
   sessionId: string,
@@ -320,7 +347,7 @@ export function finalizeMessages(
       },
     ];
   });
-  const merged = mergeAdjacentAssistantNarrative(expanded);
+  const merged = mergeAdjacentAssistantActivity(mergeAdjacentAssistantNarrative(expanded));
 
   return merged.map((message, index) => ({
     provider,

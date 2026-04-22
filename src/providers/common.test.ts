@@ -82,4 +82,42 @@ describe("splitAssistantMessage", () => {
       ["prose", "Third update."],
     ]);
   });
+
+  test("merges adjacent assistant command activity into one transcript item", () => {
+    const messages = finalizeMessages("codex", "session-1", [
+      {
+        role: "assistant",
+        text: "npm run test",
+        kind: "command",
+        displayMode: "summarize",
+        timestamp: "2026-04-22T00:00:00.000Z",
+      },
+      {
+        role: "assistant",
+        text: "npm run build",
+        kind: "command",
+        displayMode: "summarize",
+        timestamp: "2026-04-22T00:00:01.000Z",
+      },
+      {
+        role: "assistant",
+        text: "apply_patch",
+        kind: "tool",
+        displayMode: "summarize",
+        timestamp: "2026-04-22T00:00:02.000Z",
+      },
+      {
+        role: "assistant",
+        text: "write_stdin",
+        kind: "tool",
+        displayMode: "summarize",
+        timestamp: "2026-04-22T00:00:03.000Z",
+      },
+    ]);
+
+    expect(messages.map((message) => [message.kind, message.originalText])).toEqual([
+      ["command", "npm run test\nnpm run build"],
+      ["tool", "apply_patch\nwrite_stdin"],
+    ]);
+  });
 });

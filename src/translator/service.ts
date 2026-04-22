@@ -28,24 +28,86 @@ function isLikelyChineseText(text: string): boolean {
   return cjkMatches.length >= 6 && cjkMatches.length >= latinMatches.length;
 }
 
+function uniqLines(lines: string[]): string[] {
+  return [...new Set(lines.map((line) => line.trim()).filter(Boolean))];
+}
+
+function summarizeCommandLine(command: string): string {
+  const normalized = command.toLowerCase();
+
+  if (normalized.includes("agent-translator tui")) {
+    return "打开翻译 TUI。";
+  }
+  if (normalized.startsWith("npm ") || normalized.includes(" npm ")) {
+    if (normalized.includes("run verify")) {
+      return "运行项目校验流程。";
+    }
+    if (normalized.includes("run test")) {
+      return "运行测试。";
+    }
+    if (normalized.includes("run build")) {
+      return "执行构建。";
+    }
+    return "运行项目脚本。";
+  }
+  if (normalized.startsWith("git ") || normalized.includes(" git ")) {
+    if (normalized.includes("status")) {
+      return "查看工作区状态。";
+    }
+    if (normalized.includes("diff")) {
+      return "查看改动差异。";
+    }
+    if (normalized.includes("add ")) {
+      return "暂存改动。";
+    }
+    if (normalized.includes("commit")) {
+      return "提交本地改动。";
+    }
+    return "执行 Git 操作。";
+  }
+  if (normalized.startsWith("rg ") || normalized.includes(" rg ")) {
+    return "搜索文本内容。";
+  }
+  if (normalized.startsWith("sed ") || normalized.includes(" sed ")) {
+    return "查看文件片段。";
+  }
+  if (normalized.startsWith("node ") || normalized.includes("node --input-type=module")) {
+    return "运行临时 Node 脚本。";
+  }
+  if (normalized.startsWith("osascript ") || normalized.includes("tell application \"terminal\"")) {
+    return "控制或读取 Terminal 窗口。";
+  }
+  if (normalized.startsWith("sleep ")) {
+    return "短暂等待结果返回。";
+  }
+  if (normalized.startsWith("cat ") || normalized.startsWith("find ") || normalized.startsWith("ls ")) {
+    return "查看本地文件信息。";
+  }
+
+  return "执行了一条命令。";
+}
+
+function summarizeToolLine(toolName: string): string {
+  const normalized = toolName.toLowerCase();
+  if (normalized === "apply_patch") {
+    return "修改了项目文件。";
+  }
+  if (normalized === "write_stdin") {
+    return "向正在运行的进程发送输入。";
+  }
+  if (normalized === "exec_command") {
+    return "调用终端执行命令。";
+  }
+  return "调用了一个工具。";
+}
+
 function buildLocalDisplayText(message: ParsedMessage): string | null {
   if (message.displayMode !== "summarize") {
     return null;
   }
 
-  const normalized = message.originalText.toLowerCase();
-
   if (message.kind === "command") {
-    if (normalized.includes("agent-translator tui")) {
-      return "给出了一条打开翻译 TUI 的命令。";
-    }
-    if (normalized.includes("npm run verify")) {
-      return "给出了一条运行项目校验流程的命令。";
-    }
-    if (normalized.includes("git")) {
-      return "给出了一条 Git 相关命令。";
-    }
-    return "给出了一条命令示例。";
+    return uniqLines(message.originalText.split("\n").map(summarizeCommandLine)).join("\n");
   }
 
   if (message.kind === "code") {
@@ -57,6 +119,7 @@ function buildLocalDisplayText(message: ParsedMessage): string | null {
   }
 
   if (message.kind === "shell") {
+    const normalized = message.originalText.toLowerCase();
     if (normalized.includes("error:") || normalized.includes("traceback") || normalized.includes("npm err!")) {
       return "展示了一段报错或异常输出。";
     }
@@ -64,7 +127,7 @@ function buildLocalDisplayText(message: ParsedMessage): string | null {
   }
 
   if (message.kind === "tool") {
-    return "调用了一个工具来完成当前操作。";
+    return uniqLines(message.originalText.split("\n").map(summarizeToolLine)).join("\n");
   }
 
   return null;

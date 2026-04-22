@@ -207,14 +207,14 @@ describe("TranscriptTranslationStore", () => {
 
     await store.setMessages([
       {
-        ...createMessage("msg-1", "```bash\nagent-translator tui --latest --provider codex\n```"),
+        ...createMessage("msg-1", "agent-translator tui --latest --provider codex"),
         kind: "command",
         displayMode: "summarize",
       },
     ]);
 
     const immediate = store.getMessages()[0];
-    expect(immediate?.displayText).toBe("给出了一条打开翻译 TUI 的命令。");
+    expect(immediate?.displayText).toBe("打开翻译 TUI。");
     expect(immediate?.translationStatus).toBe("scheduled");
 
     await waitForCondition(() => generate.mock.calls.length === 1);
@@ -223,6 +223,28 @@ describe("TranscriptTranslationStore", () => {
 
     const final = store.getMessages()[0];
     expect(final?.displayText).toBe("该命令会打开最新的 Codex 翻译 TUI。");
+    store.destroy();
+  });
+
+  test("summarizes merged command activity into short Chinese lines", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
+    const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache,
+      translator: { generate: vi.fn().mockResolvedValue("unused") } as any,
+    });
+
+    await store.setMessages([
+      {
+        ...createMessage("msg-1", "npm run test\ngit status\nosascript -e 'tell application \"Terminal\" to do script \"echo hi\"'"),
+        kind: "command",
+        displayMode: "summarize",
+      },
+    ]);
+
+    const message = store.getMessages()[0];
+    expect(message?.displayText).toBe("运行测试。\n查看工作区状态。\n控制或读取 Terminal 窗口。");
     store.destroy();
   });
 });

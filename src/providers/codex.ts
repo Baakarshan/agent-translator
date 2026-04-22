@@ -63,6 +63,23 @@ function extractEventMessageText(message: unknown): string {
   return "";
 }
 
+function extractStringField(record: unknown, field: string): string | null {
+  if (!record || typeof record !== "object") {
+    return null;
+  }
+  const value = (record as Record<string, unknown>)[field];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function parseToolArguments(argumentsText: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(argumentsText);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseResponseItem(entry: Record<string, unknown>, fallbackTimestamp: string): RawParsedMessage | null {
   const payload = (entry.payload ?? entry.item) as Record<string, unknown> | undefined;
   if (!payload || typeof payload !== "object") {
@@ -84,6 +101,40 @@ function parseResponseItem(entry: Record<string, unknown>, fallbackTimestamp: st
     return {
       role,
       text,
+      timestamp: readTimestamp(entry, fallbackTimestamp),
+    };
+  }
+
+  if (payload.type === "function_call" && typeof payload.name === "string") {
+    const argumentsText = typeof payload.arguments === "string" ? payload.arguments.trim() : "";
+    const parsedArguments = argumentsText ? parseToolArguments(argumentsText) : null;
+
+    if (payload.name === "exec_command") {
+      const commandText = extractStringField(parsedArguments, "cmd") ?? "exec_command";
+      return {
+        role: "assistant",
+        text: commandText,
+        kind: "command",
+        displayMode: displayModeForKind("command"),
+        timestamp: readTimestamp(entry, fallbackTimestamp),
+      };
+    }
+
+    return {
+      role: "assistant",
+      text: payload.name,
+      kind: "tool",
+      displayMode: displayModeForKind("tool"),
+      timestamp: readTimestamp(entry, fallbackTimestamp),
+    };
+  }
+
+  if (payload.type === "custom_tool_call" && typeof payload.name === "string") {
+    return {
+      role: "assistant",
+      text: payload.name,
+      kind: "tool",
+      displayMode: displayModeForKind("tool"),
       timestamp: readTimestamp(entry, fallbackTimestamp),
     };
   }

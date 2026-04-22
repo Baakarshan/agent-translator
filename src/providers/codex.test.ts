@@ -18,6 +18,7 @@ describe("parseCodexSessionFile", () => {
     expect(snapshot?.messages.map((message) => [message.role, message.kind, message.originalText])).toEqual([
       ["user", "prose", "Please help me review this change"],
       ["assistant", "prose", "I will inspect the diff first."],
+      ["assistant", "command", "git diff"],
     ]);
   });
 
@@ -30,7 +31,7 @@ describe("parseCodexSessionFile", () => {
 
     await writeFile(filePath, `${completePrefix}\n${partialLine}`, "utf8");
     const incomplete = await parseCodexSessionFile(filePath);
-    expect(incomplete?.messages.at(-1)?.originalText).toBe("I will inspect the diff first.");
+    expect(incomplete?.messages.at(-1)?.originalText).toBe("git diff");
 
     await writeFile(
       filePath,
@@ -38,6 +39,6 @@ describe("parseCodexSessionFile", () => {
       "utf8",
     );
     const complete = await parseCodexSessionFile(filePath);
-    expect(complete?.messages.at(-1)?.originalText).toBe("I will inspect the diff first.\n\nTrailing assistant message");
+    expect(complete?.messages.at(-1)?.originalText).toBe("Trailing assistant message");
   });
 });
