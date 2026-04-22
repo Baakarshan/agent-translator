@@ -43,6 +43,9 @@ AGENT_TRANSLATOR_BASE_URL=https://apicodex.xyz
 AGENT_TRANSLATOR_MODEL=gpt-5.2
 ```
 
+- `AGENT_TRANSLATOR_BASE_URL` is required. The project no longer ships with a default remote endpoint.
+- `.env.local` is intentionally gitignored. Keep real keys there and do not commit that file.
+
 If your gateway exposes `/v1/responses`, set:
 
 ```bash
@@ -110,8 +113,40 @@ On macOS, the launcher now tries Ghostty first via `/Applications/Ghostty.app`. 
 
 You can also attach the TUI to the active Codex desktop conversation by passing its session id directly. The same session files under `~/.codex/sessions/` are used by both the desktop app and the CLI.
 
+## Privacy and security
+
+- Assistant content is sent to the configured translation gateway exactly as received for rows that still require remote generation.
+- Keep `AGENT_TRANSLATOR_BASE_URL` pointed only at a backend you trust to receive project text, code snippets, paths, and shell output summaries.
+- `.env.local` is local-only and should stay out of version control.
+- Local translation cache and debug logs are stored under `~/.agent-translator/`.
+
 ## Verify
 
 ```bash
 npm run verify
+npm audit
+```
+
+## Open-source checklist
+
+Before pushing this project to GitHub:
+
+```bash
+git status --short
+git ls-files
+```
+
+Check these items:
+
+- `.env.local` is not tracked
+- any temporary API keys have been rotated
+- `npm run verify` passes
+- `npm audit` reports no known vulnerabilities
+- README examples do not contain real secrets
+
+Then publish the repository:
+
+```bash
+git remote add origin git@github.com:<your-account>/agent-translator.git
+git push -u origin main
 ```
