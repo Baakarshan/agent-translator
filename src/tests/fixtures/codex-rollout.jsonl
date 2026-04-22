@@ -1,0 +1,6 @@
+{"timestamp":"2026-04-16T09:11:18.197Z","type":"session_meta","payload":{"id":"019d958f-1fb2-75d0-8181-7339ec961519","cwd":"/Users/baakarshan/Developer/products/demo"}}
+{"timestamp":"2026-04-16T09:12:03.513Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Please help me review this change"}]}}
+{"timestamp":"2026-04-16T09:12:03.513Z","type":"event_msg","payload":{"type":"user_message","message":"Please help me review this change"}}
+{"timestamp":"2026-04-16T09:12:36.899Z","type":"event_msg","payload":{"type":"agent_message","message":"I will inspect the diff first."}}
+{"timestamp":"2026-04-16T09:12:36.902Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I will inspect the diff first."}]}}
+{"timestamp":"2026-04-16T09:12:36.903Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"git diff\"}","call_id":"call_1"}}
