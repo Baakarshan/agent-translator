@@ -57,6 +57,22 @@ describe("flattenTranscript", () => {
     expect(lines.some((line) => line.text.includes("git diff"))).toBe(false);
   });
 
+  test("keeps continuation lines aligned after the label column", () => {
+    const lines = flattenTranscript(
+      [
+        createAssistantMessage({
+          displayText: "第一行\n第二行",
+          translationStatus: "cached",
+        }),
+      ],
+      80,
+    );
+
+    expect(lines[0]?.prefix).toBe("翻译 ");
+    expect(lines[1]?.prefix).toBe("     ");
+    expect(lines[1]?.text).toBe("第二行");
+  });
+
   test("renders translated markdown tables as box tables instead of raw pipes", () => {
     const lines = flattenTranscript(
       [

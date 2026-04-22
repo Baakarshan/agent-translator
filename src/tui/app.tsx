@@ -26,6 +26,8 @@ type TranscriptLine = {
   wrap?: "wrap" | "truncate-end";
 };
 
+const LABEL_COLUMN_WIDTH = 4;
+
 const THEME = {
   provider: {
     codex: "#60a5fa",
@@ -105,8 +107,9 @@ function renderLabeledLines(
   textColor: string,
 ): TranscriptLine[] {
   const logicalLines = text.split("\n");
-  const prefix = `${label} `;
-  const continuationPrefix = " ".repeat(prefix.length);
+  const paddedLabel = `${label}${" ".repeat(Math.max(0, LABEL_COLUMN_WIDTH - textWidth(label)))}`;
+  const prefix = `${paddedLabel} `;
+  const continuationPrefix = " ".repeat(textWidth(prefix));
   const rendered: TranscriptLine[] = [];
 
   logicalLines.forEach((line, logicalIndex) => {
@@ -237,8 +240,9 @@ function renderTableLines(
     return null;
   }
 
-  const prefix = `${label} `;
-  const continuationPrefix = " ".repeat(prefix.length);
+  const paddedLabel = `${label}${" ".repeat(Math.max(0, LABEL_COLUMN_WIDTH - textWidth(label)))}`;
+  const prefix = `${paddedLabel} `;
+  const continuationPrefix = " ".repeat(textWidth(prefix));
   const availableWidth = Math.max(24, width - textWidth(prefix));
   const columnWidths = fitColumnWidths(rows, availableWidth);
   const border = (left: string, middle: string, right: string): string =>
@@ -382,7 +386,7 @@ function SessionListView(props: { sessions: SessionDescriptor[]; selectedIndex: 
   );
 }
 
-function SessionDetailView(props: {
+const SessionDetailView = React.memo(function SessionDetailView(props: {
   descriptor: SessionDescriptor;
   snapshot: SessionSnapshot | null;
   messages: DisplayMessage[];
@@ -414,7 +418,7 @@ function SessionDetailView(props: {
       </Box>
     </Box>
   );
-}
+});
 
 export function App(props: AppProps): React.JSX.Element {
   const { exit } = useApp();
@@ -422,6 +426,7 @@ export function App(props: AppProps): React.JSX.Element {
   const [view, setView] = useState<ViewState>(props.latest || props.sessionId ? "waiting" : "list");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(props.sessionId ?? null);
+  const [attachedDescriptor, setAttachedDescriptor] = useState<SessionDescriptor | null>(null);
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
 
@@ -456,6 +461,15 @@ export function App(props: AppProps): React.JSX.Element {
     return visibleSessions[selectedIndex] ?? null;
   }, [props.afterMs, props.cwd, props.latest, props.provider, selectedIndex, selectedSessionId, sessions, visibleSessions]);
   const selectedDescriptorWatchKey = getDescriptorWatchKey(selectedDescriptor);
+  const detailDescriptor = attachedDescriptor ?? selectedDescriptor;
+
+  useEffect(() => {
+    if (selectedDescriptor) {
+      setAttachedDescriptor(selectedDescriptor);
+      return;
+    }
+    setAttachedDescriptor(null);
+  }, [selectedDescriptorWatchKey]);
 
   useEffect(() => {
     const index = new SessionIndex(props.provider);
@@ -576,10 +590,10 @@ export function App(props: AppProps): React.JSX.Element {
     );
   }
 
-  if (view === "detail" && selectedDescriptor) {
+  if (view === "detail" && detailDescriptor) {
     return (
       <SessionDetailView
-        descriptor={selectedDescriptor}
+        descriptor={detailDescriptor}
         snapshot={snapshot}
         messages={messages}
       />

@@ -1,6 +1,7 @@
 import chokidar, { type FSWatcher } from "chokidar";
 
 import { writeDebugLog } from "./debug-log.js";
+import { hashText } from "./providers/common.js";
 import { parseClaudeSessionFile } from "./providers/claude.js";
 import { parseCodexSessionFile } from "./providers/codex.js";
 import type { SessionDescriptor, SessionSnapshot } from "./types.js";
@@ -13,6 +14,24 @@ export async function loadSessionSnapshot(
     : parseClaudeSessionFile(descriptor.filePath);
 }
 
+export function getSnapshotContentKey(snapshot: SessionSnapshot | null): string {
+  if (!snapshot) {
+    return "null";
+  }
+
+  const content = snapshot.messages
+    .map((message) => [
+      message.role,
+      message.kind,
+      message.displayMode,
+      message.timestamp,
+      message.originalText,
+    ].join("\u0000"))
+    .join("\u0001");
+
+  return `${snapshot.provider}:${snapshot.sessionId}:${snapshot.messages.length}:${hashText(content)}`;
+}
+
 export function watchSessionSnapshot(
   descriptor: SessionDescriptor,
   onUpdate: (snapshot: SessionSnapshot | null) => void,
@@ -20,6 +39,7 @@ export function watchSessionSnapshot(
   let closed = false;
   let watcher: FSWatcher | null = null;
   let timer: NodeJS.Timeout | null = null;
+  let lastContentKey: string | null = null;
 
   const refresh = async () => {
     if (closed) {
@@ -27,6 +47,11 @@ export function watchSessionSnapshot(
     }
     try {
       const snapshot = await loadSessionSnapshot(descriptor);
+      const nextContentKey = getSnapshotContentKey(snapshot);
+      if (lastContentKey === nextContentKey) {
+        return;
+      }
+      lastContentKey = nextContentKey;
       onUpdate(snapshot);
     } catch (error) {
       await writeDebugLog("watchSessionSnapshot.refresh", {
@@ -34,6 +59,10 @@ export function watchSessionSnapshot(
         filePath: descriptor.filePath,
         error: error instanceof Error ? error.message : String(error),
       });
+      if (lastContentKey === "null") {
+        return;
+      }
+      lastContentKey = "null";
       onUpdate(null);
     }
   };
@@ -77,4 +106,3 @@ export function watchSessionSnapshot(
     await watcher?.close();
   };
 }
-
