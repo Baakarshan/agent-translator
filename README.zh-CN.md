@@ -12,6 +12,14 @@ English README: [README.md](./README.md)
 - 代码块、命令、工具调用、diff、shell 风格输出会改写成简洁中文摘要
 - 长会话采用串行翻译队列，尽量减少瞬时大量请求导致的 `429`
 
+## 截图
+
+项目截图统一放在 `docs/screenshots/` 目录下。
+
+当前示例展示的是：左侧为 Codex 桌面端对话，右侧为只读的中文翻译 TUI。
+
+![Codex 桌面端与 Agent Translator TUI](./docs/screenshots/codex-desktop-with-tui.png)
+
 ## 依赖
 
 - Node.js 20+

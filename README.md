@@ -12,6 +12,14 @@ It keeps the native agent running in its original terminal and shows Chinese-onl
 - code blocks, commands, tool calls, diffs, and shell-like output are converted into concise Chinese summaries
 - long live transcripts are translated through a serialized queue to reduce bursty `429` failures
 
+## Screenshot
+
+Project screenshots now live under `docs/screenshots/`.
+
+Current example: Codex desktop on the left, read-only translation TUI on the right.
+
+![Codex desktop with Agent Translator TUI](./docs/screenshots/codex-desktop-with-tui.png)
+
 ## Requirements
 
 - Node.js 20+
