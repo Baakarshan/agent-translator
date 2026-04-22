@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -96,7 +97,7 @@ function isMainModule(): boolean {
   if (!entryPath) {
     return false;
   }
-  return import.meta.url === pathToFileURL(path.resolve(entryPath)).href;
+  return import.meta.url === pathToFileURL(realpathSync(path.resolve(entryPath))).href;
 }
 
 if (isMainModule()) {

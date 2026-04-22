@@ -1,5 +1,7 @@
 # Agent Translator TUI v1
 
+Chinese README: [README.zh-CN.md](./README.zh-CN.md)
+
 Read-only translation TUI for Codex and Claude Code.
 
 It keeps the native agent running in its original terminal and shows English assistant output plus Simplified Chinese translations in a separate TUI window.
