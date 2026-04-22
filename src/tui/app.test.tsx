@@ -2,7 +2,14 @@ import { describe, expect, test } from "vitest";
 
 import type { DisplayMessage } from "../types.js";
 import type { SessionDescriptor } from "../types.js";
-import { flattenTranscript, getDescriptorWatchKey, getTranscriptRenderKey } from "./app.js";
+import {
+  computeDetailViewportHeight,
+  flattenTranscript,
+  getDescriptorWatchKey,
+  getMaxScrollOffset,
+  getNextScrollOffset,
+  getVisibleTranscriptLines,
+} from "./app.js";
 
 function createAssistantMessage(overrides: Partial<DisplayMessage>): DisplayMessage {
   return {
@@ -137,59 +144,47 @@ describe("getDescriptorWatchKey", () => {
   });
 });
 
-describe("getTranscriptRenderKey", () => {
-  test("ignores snapshot metadata churn when transcript content is unchanged", () => {
-    const message = createAssistantMessage({
-      displayText: "缓存文本",
-      translationStatus: "cached",
-    });
-
-    const first = getTranscriptRenderKey(
-      {
-        provider: "codex",
-        sessionId: "session-1",
-        filePath: "/tmp/session.jsonl",
-        cwd: "/tmp/project",
-        title: "old title",
-        lastActivityAt: "2026-04-22T00:00:00.000Z",
-        lastActivityMs: 1,
-        live: false,
-        messages: [message],
-      },
-      [message],
-    );
-    const second = getTranscriptRenderKey(
-      {
-        provider: "codex",
-        sessionId: "session-1",
-        filePath: "/tmp/session.jsonl",
-        cwd: "/tmp/project",
-        title: "new title",
-        lastActivityAt: "2026-04-22T00:01:00.000Z",
-        lastActivityMs: 2,
-        live: true,
-        messages: [message],
-      },
-      [message],
-    );
-
-    expect(first).toBe(second);
+describe("detail viewport helpers", () => {
+  test("follows the latest lines automatically while already at the bottom", () => {
+    expect(
+      getNextScrollOffset({
+        previousLineCount: 20,
+        nextLineCount: 24,
+        previousScrollOffset: 10,
+        viewportHeight: 10,
+      }),
+    ).toBe(14);
   });
 
-  test("changes when visible transcript output changes", () => {
-    const baseMessage = createAssistantMessage({
-      displayText: "第一版",
-      translationStatus: "cached",
-    });
-    const nextMessage = createAssistantMessage({
-      displayText: "第二版",
-      translationStatus: "cached",
-    });
-
+  test("keeps the current reading position when new lines arrive above the bottom", () => {
     expect(
-      getTranscriptRenderKey(null, [baseMessage]),
-    ).not.toBe(
-      getTranscriptRenderKey(null, [nextMessage]),
-    );
+      getNextScrollOffset({
+        previousLineCount: 20,
+        nextLineCount: 24,
+        previousScrollOffset: 4,
+        viewportHeight: 10,
+      }),
+    ).toBe(4);
+  });
+
+  test("clips transcript lines to the active viewport", () => {
+    const lines = [
+      { key: "1", text: "line-1" },
+      { key: "2", text: "line-2" },
+      { key: "3", text: "line-3" },
+      { key: "4", text: "line-4" },
+    ];
+
+    expect(getVisibleTranscriptLines(lines, 1, 2).map((line) => line.text)).toEqual([
+      "line-2",
+      "line-3",
+    ]);
+  });
+
+  test("derives viewport size and max offset defensively", () => {
+    expect(computeDetailViewportHeight(20)).toBe(14);
+    expect(computeDetailViewportHeight(undefined)).toBeGreaterThanOrEqual(6);
+    expect(getMaxScrollOffset(30, 10)).toBe(20);
+    expect(getMaxScrollOffset(3, 10)).toBe(0);
   });
 });
