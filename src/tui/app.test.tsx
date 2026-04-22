@@ -3,12 +3,9 @@ import { describe, expect, test } from "vitest";
 import type { DisplayMessage } from "../types.js";
 import type { SessionDescriptor } from "../types.js";
 import {
-  computeDetailViewportHeight,
   flattenTranscript,
   getDescriptorWatchKey,
-  getMaxScrollOffset,
-  getNextScrollOffset,
-  getVisibleTranscriptLines,
+  getTranscriptRenderKey,
 } from "./app.js";
 
 function createAssistantMessage(overrides: Partial<DisplayMessage>): DisplayMessage {
@@ -144,47 +141,26 @@ describe("getDescriptorWatchKey", () => {
   });
 });
 
-describe("detail viewport helpers", () => {
-  test("follows the latest lines automatically while already at the bottom", () => {
-    expect(
-      getNextScrollOffset({
-        previousLineCount: 20,
-        nextLineCount: 24,
-        previousScrollOffset: 10,
-        viewportHeight: 10,
-      }),
-    ).toBe(14);
+describe("getTranscriptRenderKey", () => {
+  test("stays stable when transcript rendering is unchanged", () => {
+    const message = createAssistantMessage({
+      displayText: "缓存文本",
+      translationStatus: "cached",
+    });
+
+    expect(getTranscriptRenderKey([message], 80)).toBe(getTranscriptRenderKey([message], 80));
   });
 
-  test("keeps the current reading position when new lines arrive above the bottom", () => {
-    expect(
-      getNextScrollOffset({
-        previousLineCount: 20,
-        nextLineCount: 24,
-        previousScrollOffset: 4,
-        viewportHeight: 10,
-      }),
-    ).toBe(4);
-  });
+  test("changes when rendered transcript output changes", () => {
+    const before = createAssistantMessage({
+      displayText: "第一版",
+      translationStatus: "cached",
+    });
+    const after = createAssistantMessage({
+      displayText: "第二版",
+      translationStatus: "cached",
+    });
 
-  test("clips transcript lines to the active viewport", () => {
-    const lines = [
-      { key: "1", text: "line-1" },
-      { key: "2", text: "line-2" },
-      { key: "3", text: "line-3" },
-      { key: "4", text: "line-4" },
-    ];
-
-    expect(getVisibleTranscriptLines(lines, 1, 2).map((line) => line.text)).toEqual([
-      "line-2",
-      "line-3",
-    ]);
-  });
-
-  test("derives viewport size and max offset defensively", () => {
-    expect(computeDetailViewportHeight(20)).toBe(14);
-    expect(computeDetailViewportHeight(undefined)).toBeGreaterThanOrEqual(6);
-    expect(getMaxScrollOffset(30, 10)).toBe(20);
-    expect(getMaxScrollOffset(3, 10)).toBe(0);
+    expect(getTranscriptRenderKey([before], 80)).not.toBe(getTranscriptRenderKey([after], 80));
   });
 });

@@ -348,43 +348,17 @@ export function flattenTranscript(messages: DisplayMessage[], width: number): Tr
   return lines;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-export function computeDetailViewportHeight(rows: number | undefined): number {
-  const terminalRows = rows ?? 30;
-  return Math.max(6, terminalRows - 6);
-}
-
-export function getMaxScrollOffset(totalLines: number, viewportHeight: number): number {
-  return Math.max(0, totalLines - viewportHeight);
-}
-
-export function getVisibleTranscriptLines(
-  lines: TranscriptLine[],
-  scrollOffset: number,
-  viewportHeight: number,
-): TranscriptLine[] {
-  return lines.slice(scrollOffset, scrollOffset + viewportHeight);
-}
-
-export function getNextScrollOffset(params: {
-  previousLineCount: number;
-  nextLineCount: number;
-  previousScrollOffset: number;
-  viewportHeight: number;
-}): number {
-  const maxPreviousOffset = getMaxScrollOffset(params.previousLineCount, params.viewportHeight);
-  const clampedPreviousOffset = clamp(params.previousScrollOffset, 0, maxPreviousOffset);
-  const wasAtBottom = clampedPreviousOffset >= maxPreviousOffset;
-  const maxNextOffset = getMaxScrollOffset(params.nextLineCount, params.viewportHeight);
-
-  if (wasAtBottom) {
-    return maxNextOffset;
-  }
-
-  return clamp(clampedPreviousOffset, 0, maxNextOffset);
+export function getTranscriptRenderKey(messages: DisplayMessage[], width: number): string {
+  return flattenTranscript(messages, width)
+    .map((line) => [
+      line.key,
+      line.prefix ?? "",
+      line.text,
+      line.color ?? "",
+      line.prefixColor ?? "",
+      line.wrap ?? "",
+    ].join("\u0000"))
+    .join("\u0001");
 }
 
 export function getDescriptorWatchKey(descriptor: SessionDescriptor | null): string | null {
@@ -429,13 +403,8 @@ const SessionDetailView = React.memo(function SessionDetailView(props: {
   descriptor: SessionDescriptor;
   snapshot: SessionSnapshot | null;
   messages: DisplayMessage[];
-  scrollOffset: number;
 }): React.JSX.Element {
   const transcriptLines = flattenTranscript(props.messages, (process.stdout.columns ?? 100) - 4);
-  const viewportHeight = computeDetailViewportHeight(process.stdout.rows);
-  const visibleLines = getVisibleTranscriptLines(transcriptLines, props.scrollOffset, viewportHeight);
-  const maxScrollOffset = getMaxScrollOffset(transcriptLines.length, viewportHeight);
-  const isAtBottom = props.scrollOffset >= maxScrollOffset;
 
   return (
     <Box flexDirection="column">
@@ -446,13 +415,13 @@ const SessionDetailView = React.memo(function SessionDetailView(props: {
       <Text dimColor>
         {props.descriptor.sessionId} · {props.descriptor.cwd}
       </Text>
-      <Text dimColor>ctrl+c/q 退出 · b 返回列表 · ↑↓/PgUp PgDn/Home End 浏览</Text>
-      <Text dimColor>{isAtBottom ? "自动跟随最新" : "已锁定当前位置；新消息不会把视图拉到底部"}</Text>
+      <Text dimColor>ctrl+c/q 退出 · b 返回列表 · 使用终端原生滚动浏览</Text>
+      <Text dimColor>仅在 transcript 真正有新内容显示时才刷新</Text>
       <Text dimColor>
         {props.snapshot ? `${props.snapshot.messages.length} 条消息` : "正在加载会话..."}
       </Text>
       <Box flexDirection="column" marginTop={1}>
-        {visibleLines.map((line) => (
+        {transcriptLines.map((line) => (
           <Text key={line.key} wrap={line.wrap ?? "wrap"}>
             {line.prefix ? (
               <Text {...(line.prefixColor ? { color: line.prefixColor } : {})}>{line.prefix}</Text>
@@ -474,8 +443,7 @@ export function App(props: AppProps): React.JSX.Element {
   const [attachedDescriptor, setAttachedDescriptor] = useState<SessionDescriptor | null>(null);
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
-  const [scrollOffset, setScrollOffset] = useState(0);
-  const lineCountRef = useRef(0);
+  const transcriptRenderKeyRef = useRef<string>("");
 
   const visibleSessions = useMemo(() => {
     if (!props.provider) {
@@ -549,8 +517,7 @@ export function App(props: AppProps): React.JSX.Element {
   }, [selectedIndex, visibleSessions.length]);
 
   useEffect(() => {
-    lineCountRef.current = 0;
-    setScrollOffset(0);
+    transcriptRenderKeyRef.current = "";
   }, [selectedDescriptorWatchKey]);
 
   useEffect(() => {
@@ -568,17 +535,11 @@ export function App(props: AppProps): React.JSX.Element {
       if (!active) {
         return;
       }
-      const nextLines = flattenTranscript(nextMessages, (process.stdout.columns ?? 100) - 4);
-      const viewportHeight = computeDetailViewportHeight(process.stdout.rows);
-      const previousLineCount = lineCountRef.current;
-      const nextLineCount = nextLines.length;
-      lineCountRef.current = nextLineCount;
-      setScrollOffset((current) => getNextScrollOffset({
-        previousLineCount,
-        nextLineCount,
-        previousScrollOffset: current,
-        viewportHeight,
-      }));
+      const nextRenderKey = getTranscriptRenderKey(nextMessages, (process.stdout.columns ?? 100) - 4);
+      if (transcriptRenderKeyRef.current === nextRenderKey) {
+        return;
+      }
+      transcriptRenderKeyRef.current = nextRenderKey;
       setMessages(nextMessages);
     };
     store.on("update", updateMessages);
@@ -636,39 +597,6 @@ export function App(props: AppProps): React.JSX.Element {
     if (input === "b") {
       setView("list");
       setSelectedSessionId(null);
-      return;
-    }
-
-    const viewportHeight = computeDetailViewportHeight(process.stdout.rows);
-    const lineCount = lineCountRef.current;
-    const maxScrollOffset = getMaxScrollOffset(lineCount, viewportHeight);
-
-    if (key.upArrow) {
-      setScrollOffset((current) => clamp(current - 1, 0, maxScrollOffset));
-      return;
-    }
-    if (key.downArrow) {
-      setScrollOffset((current) => clamp(current + 1, 0, maxScrollOffset));
-      return;
-    }
-    if (key.pageUp) {
-      setScrollOffset((current) => clamp(current - Math.max(1, viewportHeight - 2), 0, maxScrollOffset));
-      return;
-    }
-    if (key.pageDown || input === " ") {
-      setScrollOffset((current) => clamp(current + Math.max(1, viewportHeight - 2), 0, maxScrollOffset));
-      return;
-    }
-    if (input === "g") {
-      setScrollOffset(0);
-      return;
-    }
-    if (input === "G" || key.end) {
-      setScrollOffset(maxScrollOffset);
-      return;
-    }
-    if (key.home) {
-      setScrollOffset(0);
     }
   });
 
@@ -692,7 +620,6 @@ export function App(props: AppProps): React.JSX.Element {
         descriptor={detailDescriptor}
         snapshot={snapshot}
         messages={messages}
-        scrollOffset={scrollOffset}
       />
     );
   }

@@ -83,12 +83,9 @@ agent-translator tui --provider claude --session <id>
 - `b`: back to session list
 - Arrow keys: move in session list
 - `Enter`: attach from session list
-- `↑` / `↓`: scroll the transcript by one line in detail view
-- `PageUp` / `PageDown` or `Space`: scroll by one page in detail view
-- `Home` / `g`: jump to the top of the transcript
-- `End` / `G`: jump to the latest lines
 
-Transcript updates automatically. If you are already at the bottom, the detail view follows new messages. If you have scrolled up, new messages do not pull your current reading position downward.
+Transcript scrolling uses the terminal's native scroll behavior again, including touchpad two-finger scrolling in Ghostty or Terminal.app.
+The TUI now redraws only when the visible transcript content actually changes, instead of on every snapshot churn.
 
 ## Output mode
 
