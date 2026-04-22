@@ -121,6 +121,28 @@ describe("splitAssistantMessage", () => {
     ]);
   });
 
+  test("does not dedupe mixed-kind rows that share the same text", () => {
+    const messages = finalizeMessages("codex", "session-1", [
+      {
+        role: "assistant",
+        text: "apply_patch",
+        timestamp: "2026-04-22T00:00:00.000Z",
+      },
+      {
+        role: "assistant",
+        text: "apply_patch",
+        kind: "tool",
+        displayMode: "summarize",
+        timestamp: "2026-04-22T00:00:01.000Z",
+      },
+    ]);
+
+    expect(messages.map((message) => [message.kind, message.originalText])).toEqual([
+      ["prose", "apply_patch"],
+      ["tool", "apply_patch"],
+    ]);
+  });
+
   test("keeps a multiline command as one command entry when merging", () => {
     const messages = finalizeMessages("codex", "session-1", [
       {

@@ -117,6 +117,31 @@ describe("TranscriptTranslationStore", () => {
     store.destroy();
   });
 
+  test("keeps local summarize fallback visible when remote generation fails", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
+    const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    const generate = vi.fn().mockRejectedValue(new Error("boom"));
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache,
+      translator: { generate } as any,
+    });
+
+    await store.setMessages([
+      {
+        ...createMessage("msg-1", "```diff\n--- a/app.ts\n+++ b/app.ts\n@@\n+const ready = true;\n```"),
+        kind: "diff",
+        displayMode: "summarize",
+      },
+    ]);
+    await waitForCondition(() => store.getMessages()[0]?.translationStatus === "failed");
+
+    const message = store.getMessages()[0];
+    expect(message?.displayText).toBe("展示了一段改动差异。");
+    expect(message?.translationStatus).toBe("failed");
+    store.destroy();
+  });
+
   test("keeps the generated result even when cache persistence fails", async () => {
     const cache = {
       load: vi.fn().mockResolvedValue(undefined),

@@ -270,7 +270,13 @@ export function dedupeAdjacentMessages(messages: RawParsedMessage[]): RawParsedM
   const deduped: RawParsedMessage[] = [];
   for (const message of messages) {
     const previous = deduped[deduped.length - 1];
-    if (previous && previous.role === message.role && previous.text === message.text) {
+    if (
+      previous &&
+      previous.role === message.role &&
+      previous.text === message.text &&
+      (previous.kind ?? null) === (message.kind ?? null) &&
+      (previous.displayMode ?? null) === (message.displayMode ?? null)
+    ) {
       continue;
     }
     deduped.push(message);

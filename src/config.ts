@@ -11,7 +11,6 @@ export const CACHE_PATH = path.join(APP_HOME, "translations.json");
 export const DEBUG_LOG_PATH = path.join(APP_HOME, "debug.log");
 export const TRANSLATION_PROMPT_VERSION = "v2";
 export const TRANSLATION_DEBOUNCE_MS = 800;
-export const DEFAULT_TRANSLATOR_BASE_URL = "https://apicodex.xyz";
 export const DEFAULT_TRANSLATOR_MODEL = "gpt-5.2";
 export const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const LOCAL_ENV_PATH = path.join(PROJECT_ROOT, ".env.local");
@@ -75,10 +74,7 @@ export function getProviderRoot(provider: ProviderId): string {
 export function getTranslatorConfig(): TranslatorConfig {
   return {
     apiKey: readConfigValue("AGENT_TRANSLATOR_API_KEY") ?? null,
-    baseUrl: (readConfigValue("AGENT_TRANSLATOR_BASE_URL") ?? DEFAULT_TRANSLATOR_BASE_URL).replace(
-      /\/+$/,
-      "",
-    ),
+    baseUrl: (readConfigValue("AGENT_TRANSLATOR_BASE_URL") ?? "").replace(/\/+$/, "") || null,
     model: readConfigValue("AGENT_TRANSLATOR_MODEL") ?? DEFAULT_TRANSLATOR_MODEL,
     promptVersion: TRANSLATION_PROMPT_VERSION,
     debounceMs: TRANSLATION_DEBOUNCE_MS,

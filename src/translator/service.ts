@@ -523,10 +523,11 @@ export class TranscriptTranslationStore extends EventEmitter {
       if (!latest || latest.fingerprint !== fingerprint) {
         return;
       }
+      const fallbackDisplayText = latest.displayText ?? buildLocalDisplayText(latest);
       this.messageStates.set(messageId, {
         ...latest,
-        summaryText: null,
-        displayText: null,
+        summaryText: latest.summaryText ?? fallbackDisplayText,
+        displayText: fallbackDisplayText,
         translationStatus: "failed",
         translationError: error instanceof Error ? error.message : String(error),
       });

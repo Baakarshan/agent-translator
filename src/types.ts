@@ -67,7 +67,7 @@ export interface SessionSelector {
 
 export interface TranslatorConfig {
   apiKey: string | null;
-  baseUrl: string;
+  baseUrl: string | null;
   model: string;
   promptVersion: string;
   debounceMs: number;

@@ -45,4 +45,21 @@ describe("TranslatorClient", () => {
     expect(body.input[0].content[0].text).toContain("Simplified Chinese");
     expect(body.input[1].content[0].text).toContain("/tmp/app.ts");
   });
+
+  test("requires an explicit base URL", async () => {
+    const client = new TranslatorClient(
+      {
+        ...getTranslatorConfig(),
+        apiKey: "test-key",
+        baseUrl: null,
+      },
+      vi.fn() as unknown as typeof fetch,
+    );
+
+    await expect(client.generate({
+      originalText: "hello",
+      kind: "prose",
+      displayMode: "translate",
+    })).rejects.toThrow("AGENT_TRANSLATOR_BASE_URL is not set");
+  });
 });

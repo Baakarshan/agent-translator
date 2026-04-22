@@ -1,3 +1,4 @@
+import path from "node:path";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 
@@ -463,12 +464,13 @@ export function App(props: AppProps): React.JSX.Element {
     }
 
     if (selectedSessionId) {
+      const targetCwd = props.cwd ? path.resolve(props.cwd) : null;
       return (
         sessions.find(
           (session) =>
             session.sessionId === selectedSessionId &&
             (!props.provider || session.provider === props.provider) &&
-            (!props.cwd || session.cwd === props.cwd),
+            (!targetCwd || path.resolve(session.cwd) === targetCwd),
         ) ?? null
       );
     }

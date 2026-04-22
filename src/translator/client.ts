@@ -107,6 +107,9 @@ export class TranslatorClient {
     if (!this.config.apiKey) {
       throw new Error("AGENT_TRANSLATOR_API_KEY is not set");
     }
+    if (!this.config.baseUrl) {
+      throw new Error("AGENT_TRANSLATOR_BASE_URL is not set");
+    }
 
     const systemPrompt = getGenerationSystemPrompt(message.kind, message.displayMode);
 
