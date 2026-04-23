@@ -128,10 +128,34 @@ function parseCommandEntry(entry: string): { workdir: string | null; command: st
   };
 }
 
+function unwrapFencedCommand(command: string): string {
+  const match = command.trim().match(/^```([^\n`]*)\n?([\s\S]*?)\n?```$/);
+  if (!match) {
+    return command.trim();
+  }
+
+  const language = match[1]?.trim().toLowerCase() ?? "";
+  if (!["bash", "sh", "zsh", "shell", "console"].includes(language)) {
+    return command.trim();
+  }
+
+  return match[2]?.trim() ?? command.trim();
+}
+
 function summarizeCommandLine(entry: string): string {
-  const { workdir, command } = parseCommandEntry(entry);
+  const { workdir, command: rawCommand } = parseCommandEntry(entry);
+  const command = unwrapFencedCommand(rawCommand);
   const normalized = command.toLowerCase();
 
+  if (normalized.startsWith("/")) {
+    if (normalized === "/exit") {
+      return "结束会话 · /exit";
+    }
+    if (normalized.startsWith("/model")) {
+      return "Claude 命令 · /model";
+    }
+    return `Claude 命令 · ${shortenKeyword(command, 20)}`;
+  }
   if (normalized.includes("agent-translator tui")) {
     return withCommand("打开 TUI", "agent-translator tui", workdir);
   }
@@ -234,6 +258,7 @@ function summarizeToolLine(entry: string): string {
   const [rawToolName = "", detail = ""] = entry.split("\u0000", 2);
   const toolName = rawToolName;
   const normalized = toolName.toLowerCase();
+  const trimmedDetail = detail.trim();
   if (normalized === "apply_patch") {
     const files = uniqLines(detail.split("\u0001")).map(shortenFilePath);
     if (files.length === 1) {
@@ -249,6 +274,21 @@ function summarizeToolLine(entry: string): string {
   }
   if (normalized === "exec_command") {
     return "调用终端执行命令。";
+  }
+  if (normalized === "read") {
+    return trimmedDetail ? `读取 · ${shortenFilePath(trimmedDetail)}` : "读取了一个文件。";
+  }
+  if (normalized === "glob") {
+    return trimmedDetail ? `查找文件 · ${shortenKeyword(trimmedDetail, 28)}` : "查找了文件。";
+  }
+  if (normalized === "grep") {
+    return trimmedDetail ? `搜索文本 · ${shortenKeyword(trimmedDetail, 28)}` : "搜索了文本。";
+  }
+  if (normalized === "edit" || normalized === "multiedit" || normalized === "write") {
+    return trimmedDetail ? `编辑 · ${shortenFilePath(trimmedDetail)}` : "编辑了文件。";
+  }
+  if (normalized === "task") {
+    return trimmedDetail ? `子任务 · ${shortenKeyword(trimmedDetail, 28)}` : "启动了一个子任务。";
   }
   return "调用了一个工具。";
 }
@@ -272,6 +312,12 @@ function buildLocalDisplayText(message: ParsedMessage): string | null {
 
   if (message.kind === "shell") {
     const normalized = message.originalText.toLowerCase();
+    if (normalized.startsWith("goodbye!")) {
+      return "结束了 Claude 会话。";
+    }
+    if (normalized.startsWith("set model to")) {
+      return "切换了 Claude 模型。";
+    }
     if (normalized.includes("error:") || normalized.includes("traceback") || normalized.includes("npm err!")) {
       return "展示了一段报错或异常输出。";
     }
@@ -357,7 +403,10 @@ export class TranscriptTranslationStore extends EventEmitter {
         continue;
       }
 
-      if (message.displayMode === "summarize" && (message.kind === "command" || message.kind === "tool")) {
+      if (
+        message.displayMode === "summarize" &&
+        (message.kind === "command" || message.kind === "tool" || message.kind === "shell")
+      ) {
         const localSummary = buildLocalDisplayText(message);
         this.clearTimer(message.messageId);
         this.messageStates.set(message.messageId, {

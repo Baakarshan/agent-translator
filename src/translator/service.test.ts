@@ -242,6 +242,44 @@ describe("TranscriptTranslationStore", () => {
     store.destroy();
   });
 
+  test("shows local Claude summaries for slash commands, tool reads, and shell outcomes", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
+    const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    const generate = vi.fn();
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache,
+      translator: { generate } as any,
+    });
+
+    await store.setMessages([
+      {
+        ...createMessage("msg-1", "/Users/baakarshan/Developer/products/agent-translator\u0000/model"),
+        kind: "command",
+        displayMode: "summarize",
+      },
+      {
+        ...createMessage("msg-2", "Read\u0000/Users/baakarshan/Developer/products/agent-translator/README.md"),
+        kind: "tool",
+        displayMode: "summarize",
+      },
+      {
+        ...createMessage("msg-3", "Set model to Sonnet 4.6 (default)"),
+        kind: "shell",
+        displayMode: "summarize",
+      },
+    ]);
+
+    expect(store.getMessages().map((message) => message.displayText)).toEqual([
+      "Claude 命令 · /model",
+      "读取 · .../agent-translator/README.md",
+      "切换了 Claude 模型。",
+    ]);
+    expect(store.getMessages().every((message) => message.translationStatus === "cached")).toBe(true);
+    expect(generate).not.toHaveBeenCalled();
+    store.destroy();
+  });
+
   test("summarizes merged command activity into short Chinese lines", async () => {
     const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
     const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
@@ -263,6 +301,30 @@ describe("TranscriptTranslationStore", () => {
     const message = store.getMessages()[0];
     expect(message?.displayText).toBe("运行测试 · npm run test\nGit 状态 · git status\nTerminal 窗口 · osascript");
     expect(message?.translationStatus).toBe("cached");
+    expect(generate).not.toHaveBeenCalled();
+    store.destroy();
+  });
+
+  test("unwraps fenced bash blocks before summarizing command rows", async () => {
+    const temporaryDir = await mkdtemp(path.join(os.tmpdir(), "agent-translator-cache-"));
+    const cache = new TranslationCache(path.join(temporaryDir, "translations.json"));
+    const generate = vi.fn();
+    const store = new TranscriptTranslationStore({
+      config: baseConfig,
+      cache,
+      translator: { generate } as any,
+    });
+
+    await store.setMessages([
+      {
+        ...createMessage("msg-1", "```bash\nnpm run verify\n```"),
+        kind: "command",
+        displayMode: "summarize",
+      },
+    ]);
+
+    expect(store.getMessages()[0]?.displayText).toBe("运行校验 · npm run verify");
+    expect(store.getMessages()[0]?.translationStatus).toBe("cached");
     expect(generate).not.toHaveBeenCalled();
     store.destroy();
   });

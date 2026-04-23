@@ -38,7 +38,7 @@ describe("flattenTranscript", () => {
       80,
     );
 
-    expect(lines.some((line) => line.prefix?.includes("翻译"))).toBe(true);
+    expect(lines.some((line) => line.prefix?.includes("译文"))).toBe(true);
     expect(lines.some((line) => line.text.includes("缓存文本"))).toBe(true);
     expect(lines.some((line) => line.text.includes("Hello world"))).toBe(false);
   });
@@ -73,8 +73,8 @@ describe("flattenTranscript", () => {
       80,
     );
 
-    expect(lines[0]?.prefix).toBe("翻译 ");
-    expect(lines[1]?.prefix).toBe("     ");
+    expect(lines[0]?.prefix).toBe("译文 │  ");
+    expect(lines[1]?.prefix).toBe("        ");
     expect(lines[1]?.text).toBe("第二行");
   });
 
@@ -101,6 +101,84 @@ describe("flattenTranscript", () => {
     expect(lines.some((line) => line.text.includes("| --- |"))).toBe(false);
   });
 
+  test("strips markdown markers inside table cells", () => {
+    const lines = flattenTranscript(
+      [
+        createAssistantMessage({
+          kind: "table",
+          displayMode: "translate",
+          displayText: [
+            "| 功能 | 说明 |",
+            "| --- | --- |",
+            "| **正文翻译** | 将 `assistant` 回复翻译为中文 |",
+          ].join("\n"),
+          translationStatus: "translated",
+        }),
+      ],
+      80,
+    );
+
+    const text = lines.map((line) => line.text).join("\n");
+    expect(text.includes("正文翻译")).toBe(true);
+    expect(text.includes("assistant")).toBe(true);
+    expect(text.includes("**正文翻译**")).toBe(false);
+    expect(text.includes("`assistant`")).toBe(false);
+  });
+
+  test("renders markdown headings and lists without raw syntax markers", () => {
+    const lines = flattenTranscript(
+      [
+        createAssistantMessage({
+          displayText: "# 概览\n- 第一项\n- 第二项",
+          translationStatus: "translated",
+        }),
+      ],
+      80,
+    );
+
+    expect(lines.some((line) => line.text === "概览")).toBe(true);
+    expect(lines.some((line) => line.text === "• 第一项")).toBe(true);
+    expect(lines.some((line) => line.text.includes("# 概览"))).toBe(false);
+    expect(lines.some((line) => line.text.includes("- 第一项"))).toBe(false);
+  });
+
+  test("renders inline markdown without raw punctuation", () => {
+    const lines = flattenTranscript(
+      [
+        createAssistantMessage({
+          displayText: "请查看 **README**、`npm run verify` 和 [文档](https://example.com)。",
+          translationStatus: "translated",
+        }),
+      ],
+      100,
+    );
+
+    const text = lines.map((line) => line.text).join("\n");
+    expect(text.includes("README")).toBe(true);
+    expect(text.includes("npm run verify")).toBe(true);
+    expect(text.includes("文档 (https://example.com)")).toBe(true);
+    expect(text.includes("**README**")).toBe(false);
+    expect(text.includes("`npm run verify`")).toBe(false);
+    expect(text.includes("[文档](https://example.com)")).toBe(false);
+  });
+
+  test("renders nested inline markdown inside bold list items", () => {
+    const lines = flattenTranscript(
+      [
+        createAssistantMessage({
+          displayText: "- **`src/cli.ts`** — 入口点",
+          translationStatus: "translated",
+        }),
+      ],
+      100,
+    );
+
+    const text = lines.map((line) => line.text).join("\n");
+    expect(text.includes("• src/cli.ts — 入口点")).toBe(true);
+    expect(text.includes("**`src/cli.ts`**")).toBe(false);
+    expect(text.includes("`src/cli.ts`")).toBe(false);
+  });
+
   test("shortens translation failures for display", () => {
     const lines = flattenTranscript(
       [
@@ -112,7 +190,8 @@ describe("flattenTranscript", () => {
       120,
     );
 
-    expect(lines.some((line) => line.text.includes("状态 [失败:"))).toBe(true);
+    expect(lines.some((line) => line.prefix?.includes("状态"))).toBe(true);
+    expect(lines.some((line) => line.text.includes("[失败:"))).toBe(true);
     expect(lines.some((line) => line.text.includes("upstream timeout"))).toBe(true);
   });
 });
